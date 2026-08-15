@@ -1,0 +1,352 @@
+{
+  "schema_version": "1.0.0",
+  "capability_id": "corebank.member.get_balance",
+  "version": "1.0.0",
+  "status": "APPROVED",
+  "name": "Lookup Member Account Balances",
+  "description": "Searches CoreBank console for a member by account ID and extracts savings and checking balances.",
+  "application": {
+    "vendor": "Apex",
+    "product": "CoreBank",
+    "min_version": "4.0.0",
+    "supported_variants": [
+      "default",
+      "tenant_branded"
+    ]
+  },
+  "entry_point": {
+    "route": "/console/members",
+    "default_base_url": "http://localhost:8080",
+    "allowed_domains": [
+      "localhost:8080",
+      "127.0.0.1:8080"
+    ]
+  },
+  "inputs_schema": {
+    "member_id": {
+      "type": "string",
+      "description": "5-digit member account identifier (e.g. '10042')",
+      "required": true,
+      "default": null,
+      "sensitive": false
+    }
+  },
+  "outputs_schema": {
+    "member_name": {
+      "type": "string",
+      "description": "Full legal name of member",
+      "nullable": false,
+      "sample": null
+    },
+    "account_status": {
+      "type": "string",
+      "description": "Account standing (ACTIVE / FROZEN)",
+      "nullable": false,
+      "sample": null
+    },
+    "savings_balance": {
+      "type": "decimal",
+      "description": "Ledger balance for regular savings account",
+      "nullable": true,
+      "sample": null
+    },
+    "checking_balance": {
+      "type": "decimal",
+      "description": "Ledger balance for checking account",
+      "nullable": true,
+      "sample": null
+    }
+  },
+  "preconditions": [
+    {
+      "type": "route_matches",
+      "pattern": "/console/members",
+      "target": null,
+      "expected": null,
+      "message": "Must be on member console root route"
+    }
+  ],
+  "steps": [
+    {
+      "id": "step_enter_member_id",
+      "description": "Enter member ID into search query input",
+      "action": "type",
+      "target": {
+        "description": "Member ID input field in search form",
+        "scope": "form[name='searchForm']",
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "textbox[name='Member ID / Account #']",
+            "priority": 1,
+            "confidence": 0.98,
+            "reasoning": "Semantic accessible textbox role with aria label",
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "input.legacy-input[name='memberId']",
+            "priority": 2,
+            "confidence": 0.88,
+            "reasoning": "Scoped CSS class in legacy searchForm",
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "xpath_structural",
+            "value": ".//td[contains(text(),'Member ID')]/following-sibling::td/input",
+            "priority": 3,
+            "confidence": 0.75,
+            "reasoning": "Table cell label adjacency fallback",
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": "{{ inputs.member_id }}",
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": {
+        "type": "value_matches",
+        "expected": "{{ inputs.member_id }}",
+        "field": null,
+        "target": null,
+        "text_pattern": null,
+        "any_of": null
+      },
+      "recovery_rules": [
+        {
+          "condition": "TRANSIENT_INTERSTITIAL",
+          "action": "dismiss_modal",
+          "target": {
+            "description": "Maintenance Notice Dismiss Button",
+            "scope": null,
+            "frame_context": null,
+            "locators": [
+              {
+                "strategy": "accessibility",
+                "value": "button[name='Dismiss Notice']",
+                "priority": 1,
+                "confidence": 0.95,
+                "reasoning": null,
+                "stability": "HIGH"
+              },
+              {
+                "strategy": "css_scoped",
+                "value": "#btn_dismiss_notice",
+                "priority": 2,
+                "confidence": 0.9,
+                "reasoning": null,
+                "stability": "HIGH"
+              }
+            ],
+            "visual_bbox": null
+          },
+          "timeout_ms": 3000,
+          "max_attempts": 1
+        }
+      ],
+      "extractions": []
+    },
+    {
+      "id": "step_click_search",
+      "description": "Submit search form to retrieve member records",
+      "action": "click",
+      "target": {
+        "description": "Search records submit button",
+        "scope": "form[name='searchForm']",
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "button[name='Search Records']",
+            "priority": 1,
+            "confidence": 0.96,
+            "reasoning": "Accessible button name query",
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "button[type='submit'][name='btnSearch']",
+            "priority": 2,
+            "confidence": 0.9,
+            "reasoning": "Scoped submit button selector",
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "xpath_structural",
+            "value": ".//button[text()='Search']",
+            "priority": 3,
+            "confidence": 0.78,
+            "reasoning": "Direct button text match",
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": null,
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": {
+        "type": "any_of",
+        "expected": null,
+        "field": null,
+        "target": null,
+        "text_pattern": null,
+        "any_of": [
+          {
+            "id": "branch_member_found",
+            "condition_type": "element_present",
+            "target": {
+              "description": null,
+              "scope": null,
+              "frame_context": null,
+              "locators": [
+                {
+                  "strategy": "css_scoped",
+                  "value": "table.account-summary-table",
+                  "priority": 1,
+                  "confidence": 0.95,
+                  "reasoning": null,
+                  "stability": "HIGH"
+                }
+              ],
+              "visual_bbox": null
+            },
+            "text_pattern": null,
+            "outcome_type": "SUCCESS",
+            "outcome_code": null,
+            "message": "Member account summary table loaded successfully"
+          },
+          {
+            "id": "branch_member_not_found",
+            "condition_type": "text_present",
+            "target": null,
+            "text_pattern": "Error: Member ID not found in core database",
+            "outcome_type": "BUSINESS_OUTCOME",
+            "outcome_code": "MEMBER_NOT_FOUND",
+            "message": "Legitimate business outcome: Record does not exist in ledger"
+          }
+        ]
+      },
+      "recovery_rules": [
+        {
+          "condition": "TRANSIENT_INTERSTITIAL",
+          "action": "dismiss_modal",
+          "target": {
+            "description": "Maintenance Notice Dismiss Button",
+            "scope": null,
+            "frame_context": null,
+            "locators": [
+              {
+                "strategy": "accessibility",
+                "value": "button[name='Dismiss Notice']",
+                "priority": 1,
+                "confidence": 0.95,
+                "reasoning": null,
+                "stability": "HIGH"
+              },
+              {
+                "strategy": "css_scoped",
+                "value": "#btn_dismiss_notice",
+                "priority": 2,
+                "confidence": 0.9,
+                "reasoning": null,
+                "stability": "HIGH"
+              }
+            ],
+            "visual_bbox": null
+          },
+          "timeout_ms": 3000,
+          "max_attempts": 1
+        }
+      ],
+      "extractions": []
+    },
+    {
+      "id": "step_extract_balances",
+      "description": "Extract member name, status, and account ledger balances",
+      "action": "extract",
+      "target": null,
+      "value_template": null,
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": null,
+      "recovery_rules": [],
+      "extractions": [
+        {
+          "field": "member_name",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//td[@id='lbl_memberName']",
+          "attribute": null,
+          "transform": "strip",
+          "nullable": false
+        },
+        {
+          "field": "account_status",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//span[@id='badge_status']",
+          "attribute": null,
+          "transform": "strip",
+          "nullable": false
+        },
+        {
+          "field": "savings_balance",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//table[@id='tbl_balances']//tr[td[contains(text(),'Regular Savings')]]/td[@class='bal-val']",
+          "attribute": null,
+          "transform": "parse_currency",
+          "nullable": true
+        },
+        {
+          "field": "checking_balance",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//table[@id='tbl_balances']//tr[td[contains(text(),'Premier Checking') or td[contains(text(),'Standard Checking')]]]/td[@class='bal-val']",
+          "attribute": null,
+          "transform": "parse_currency",
+          "nullable": true
+        }
+      ]
+    }
+  ],
+  "postconditions": [
+    {
+      "type": "output_populated",
+      "expected": null,
+      "field": "member_name",
+      "target": null,
+      "text_pattern": null,
+      "any_of": null
+    }
+  ],
+  "policy": {
+    "risk_level": "READ_ONLY",
+    "allowed_actions": [
+      "click",
+      "type",
+      "extract",
+      "wait",
+      "scroll",
+      "navigate"
+    ],
+    "allowed_routes": [
+      "^/console/.*$"
+    ],
+    "requires_confirmation_on_risk": true,
+    "max_step_timeout_ms": 10000
+  },
+  "metadata": {}
+}

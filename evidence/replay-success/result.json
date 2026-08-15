@@ -1,0 +1,10 @@
+{
+  "status": "SUCCESS",
+  "outcome_code": null,
+  "outputs": {
+    "member_name": "Jane Doe",
+    "account_status": "ACTIVE",
+    "savings_balance": 12450.75,
+    "checking_balance": 3210.5
+  }
+}

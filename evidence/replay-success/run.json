@@ -1,0 +1,59 @@
+{
+  "run_id": "run_2d7b54f7",
+  "capability_id": "corebank.member.get_balance",
+  "version": "1.0.0",
+  "session_id": "sess_bb71c90a",
+  "status": "SUCCESS",
+  "outcome_code": null,
+  "message": "Replay completed successfully.",
+  "outputs": {
+    "member_name": "Jane Doe",
+    "account_status": "ACTIVE",
+    "savings_balance": 12450.75,
+    "checking_balance": 3210.5
+  },
+  "steps_executed": 3,
+  "duration_ms": 757.2658061981201,
+  "step_trace": [
+    {
+      "step_id": "step_enter_member_id",
+      "action": "type",
+      "target_description": "Member ID input field in search form",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.98,
+      "duration_ms": 85.65211296081543,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_click_search",
+      "action": "click",
+      "target_description": "Search records submit button",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.96,
+      "duration_ms": 45.01509666442871,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_extract_balances",
+      "action": "extract",
+      "target_description": null,
+      "matched_strategy": "N/A",
+      "strategy_confidence": 1.0,
+      "duration_ms": 21.175861358642578,
+      "status": "SUCCESS",
+      "extracted_data": {
+        "member_name": "Jane Doe",
+        "account_status": "ACTIVE",
+        "savings_balance": 12450.75,
+        "checking_balance": 3210.5
+      },
+      "error_message": null
+    }
+  ],
+  "error": null,
+  "human_interventions": []
+}

@@ -1,0 +1,7 @@
+{
+  "run_id": "run_hitl_001",
+  "session_id": "sess_hitl_demo_402",
+  "status": "SUCCESS",
+  "capability_id": "corebank.account.open_subaccount",
+  "hitl_interventions": 1
+}

@@ -1,0 +1,12 @@
+{
+  "session_id": "sess_hitl_demo_402",
+  "capability_id": "corebank.account.open_subaccount",
+  "step_id": "step_authorize_creation",
+  "step_index": 5,
+  "reason": "High-risk irreversible sub-account ledger creation requires operator confirmation.",
+  "risk_level": "HIGH_RISK",
+  "timestamp": 1786828328.2752929,
+  "screenshot_path": "evidence/replay-hitl/intervention_sess_hitl_demo_402_step_5.png",
+  "current_owner": "HUMAN",
+  "status": "AWAITING_HUMAN"
+}

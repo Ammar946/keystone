@@ -1,0 +1,350 @@
+{
+  "schema_version": "1.0.0",
+  "capability_id": "corebank.account.open_subaccount",
+  "version": "1.0.0",
+  "status": "APPROVED",
+  "name": "Open Deposit Sub-Account",
+  "description": "Provisions a new deposit sub-account for an existing member through the authorization modal.",
+  "application": {
+    "vendor": "Apex",
+    "product": "CoreBank",
+    "min_version": "4.0.0",
+    "supported_variants": [
+      "default",
+      "tenant_branded"
+    ]
+  },
+  "entry_point": {
+    "route": "/console/accounts/open",
+    "default_base_url": "http://localhost:8080",
+    "allowed_domains": [
+      "localhost:8080",
+      "127.0.0.1:8080"
+    ]
+  },
+  "inputs_schema": {
+    "member_id": {
+      "type": "string",
+      "description": "Member ID",
+      "required": true,
+      "default": "10042",
+      "sensitive": false
+    },
+    "account_type": {
+      "type": "string",
+      "description": "Product Type",
+      "required": true,
+      "default": "Money Market",
+      "sensitive": false
+    },
+    "deposit_amount": {
+      "type": "number",
+      "description": "Opening deposit ($)",
+      "required": true,
+      "default": 500.0,
+      "sensitive": false
+    }
+  },
+  "outputs_schema": {
+    "new_account_number": {
+      "type": "string",
+      "description": "Allocated ledger account number",
+      "nullable": true,
+      "sample": null
+    },
+    "confirmed_deposit": {
+      "type": "decimal",
+      "description": "Recorded initial deposit amount",
+      "nullable": true,
+      "sample": null
+    }
+  },
+  "preconditions": [],
+  "steps": [
+    {
+      "id": "step_enter_member_id",
+      "description": "Enter target member identifier",
+      "action": "type",
+      "target": {
+        "description": "Target member ID input field",
+        "scope": null,
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "textbox[name='Target Member ID']",
+            "priority": 1,
+            "confidence": 0.98,
+            "reasoning": null,
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "#input_member_id",
+            "priority": 2,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": "{{ inputs.member_id }}",
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": null,
+      "recovery_rules": [],
+      "extractions": []
+    },
+    {
+      "id": "step_select_product",
+      "description": "Select sub-account instrument type",
+      "action": "select",
+      "target": {
+        "description": "Account product dropdown selector",
+        "scope": null,
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "combobox[name='Sub-Account Product Type']",
+            "priority": 1,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "#select_account_type",
+            "priority": 2,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": "{{ inputs.account_type }}",
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": null,
+      "recovery_rules": [],
+      "extractions": []
+    },
+    {
+      "id": "step_enter_deposit",
+      "description": "Enter initial opening deposit funding amount",
+      "action": "type",
+      "target": {
+        "description": "Deposit amount number input",
+        "scope": null,
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "spinbutton[name='Opening Deposit Amount']",
+            "priority": 1,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "#input_deposit",
+            "priority": 2,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": "{{ inputs.deposit_amount }}",
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": null,
+      "recovery_rules": [],
+      "extractions": []
+    },
+    {
+      "id": "step_click_proceed",
+      "description": "Launch security authorization modal iframe",
+      "action": "click",
+      "target": {
+        "description": "Proceed to authorization button",
+        "scope": null,
+        "frame_context": null,
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "button[name='Proceed to Authorization']",
+            "priority": 1,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "#btn_proceed_confirmation",
+            "priority": 2,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": null,
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": {
+        "type": "element_present",
+        "expected": null,
+        "field": null,
+        "target": {
+          "description": null,
+          "scope": null,
+          "frame_context": null,
+          "locators": [
+            {
+              "strategy": "css_scoped",
+              "value": "#confirmation_modal",
+              "priority": 1,
+              "confidence": 0.95,
+              "reasoning": null,
+              "stability": "HIGH"
+            }
+          ],
+          "visual_bbox": null
+        },
+        "text_pattern": null,
+        "any_of": null
+      },
+      "recovery_rules": [],
+      "extractions": []
+    },
+    {
+      "id": "step_authorize_creation",
+      "description": "Authorize and bind creation in Core Banking Ledger (IRREVERSIBLE)",
+      "action": "click",
+      "target": {
+        "description": "Authorize creation confirmation button inside security iframe",
+        "scope": null,
+        "frame_context": "dialog_frame",
+        "locators": [
+          {
+            "strategy": "accessibility",
+            "value": "button[name='Authorize Creation']",
+            "priority": 1,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          },
+          {
+            "strategy": "css_scoped",
+            "value": "#btn_authorize_creation",
+            "priority": 2,
+            "confidence": 0.95,
+            "reasoning": null,
+            "stability": "HIGH"
+          }
+        ],
+        "visual_bbox": null
+      },
+      "value_template": null,
+      "risk_level": "HIGH_RISK",
+      "idempotent": false,
+      "retryable": false,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": {
+        "type": "element_present",
+        "expected": null,
+        "field": null,
+        "target": {
+          "description": null,
+          "scope": null,
+          "frame_context": null,
+          "locators": [
+            {
+              "strategy": "css_scoped",
+              "value": "#confirmation_success_container",
+              "priority": 1,
+              "confidence": 0.95,
+              "reasoning": null,
+              "stability": "HIGH"
+            }
+          ],
+          "visual_bbox": null
+        },
+        "text_pattern": null,
+        "any_of": null
+      },
+      "recovery_rules": [],
+      "extractions": []
+    },
+    {
+      "id": "step_extract_confirmation",
+      "description": "Extract provisioned sub-account reference details",
+      "action": "extract",
+      "target": null,
+      "value_template": null,
+      "risk_level": "READ_ONLY",
+      "idempotent": true,
+      "retryable": true,
+      "timeout_ms": 5000,
+      "preconditions": [],
+      "postcondition": null,
+      "recovery_rules": [],
+      "extractions": [
+        {
+          "field": "new_account_number",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//strong[@id='lbl_new_account_number']",
+          "attribute": null,
+          "transform": "strip",
+          "nullable": true
+        },
+        {
+          "field": "confirmed_deposit",
+          "strategy": "xpath_structural",
+          "target": null,
+          "selector": "//strong[@id='lbl_confirmed_deposit']",
+          "attribute": null,
+          "transform": "parse_currency",
+          "nullable": true
+        }
+      ]
+    }
+  ],
+  "postconditions": [],
+  "policy": {
+    "risk_level": "HIGH_RISK",
+    "allowed_actions": [
+      "click",
+      "type",
+      "select",
+      "extract",
+      "wait"
+    ],
+    "allowed_routes": [
+      "^/console/.*$"
+    ],
+    "requires_confirmation_on_risk": true,
+    "max_step_timeout_ms": 10000
+  },
+  "metadata": {}
+}
