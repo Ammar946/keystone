@@ -1,6 +1,6 @@
-# Computer-Use Automation System for Banking Back-Office Applications
+# Keystone: Computer-Use Automation System for Banking Back-Office Applications
 
-A production-grade Computer-Use Automation System designed for US banks and credit unions to operate legacy back-office software without APIs.
+A production-grade Computer-Use Automation System designed for enterprise banking and credit unions to operate legacy back-office software without APIs.
 
 Built on the two-stage lifecycle:
 1. **Discovery (Model in the Loop)**: An LLM-driven agent observes and drives a live application surface, discovers resilient multi-strategy locators, verifies invariants, and compiles the flow into a typed, parameterized **Capability Artifact**.
@@ -13,7 +13,7 @@ Built on the two-stage lifecycle:
 ## Repository Structure
 
 ```
-interfaceAI/
+keystone/
 ├── app/
 │   ├── adapters/
 │   │   └── playwright_adapter.py      # Playwright Web & Legacy Frames SurfaceAdapter
@@ -60,8 +60,8 @@ interfaceAI/
 ### 2. Installation
 ```bash
 # Clone the repository and navigate into the workspace
-git clone https://github.com/<your-org>/interfaceAI.git
-cd interfaceAI
+git clone https://github.com/<your-username>/keystone.git
+cd keystone
 
 # Create virtual environment and activate
 python3 -m venv .venv

@@ -238,7 +238,7 @@ def run_tests(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="interface.ai Computer-Use Automation System CLI")
+    parser = argparse.ArgumentParser(description="Keystone: Computer-Use Automation System CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # serve-target
