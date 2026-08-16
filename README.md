@@ -139,4 +139,4 @@ python cli.py test
 
 ## Architectural Documentation
 
-For an in-depth analysis of system trade-offs, the SurfaceAdapter abstraction, multi-tenant reuse models, error taxonomy, and safety guardrails, see the formal write-up in [REPORT.md](file:///Users/ammarshahbaz/Desktop/interfaceAI/REPORT.md).
+For an in-depth analysis of system trade-offs, the SurfaceAdapter abstraction, multi-tenant reuse models, error taxonomy, and safety guardrails, see the formal write-up in [REPORT.md].

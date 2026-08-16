@@ -1,6 +1,6 @@
 # Engineering Report: Computer-Use Automation System
 
-**Author**: Engineering Submission for interface.ai  
+**Author**: Engineering Submission
 **Repository**: Public GitHub Repository  
 **Format**: Architectural Design & Technical Write-Up  
 
