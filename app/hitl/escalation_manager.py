@@ -103,3 +103,12 @@ class HITLEscalationManager:
         else:
             self.execution_state = ExecutionState.ABORTED
             return False
+
+    def confirm_resumption_complete(self) -> None:
+        """Called after postcondition verification to fully transition back to RUNNING_AUTOMATION."""
+        self.execution_state = ExecutionState.RUNNING_AUTOMATION
+        self.control_owner = ControlOwner.AUTOMATION
+
+    def mark_completed(self) -> None:
+        """Called when capability execution successfully completes."""
+        self.execution_state = ExecutionState.COMPLETED

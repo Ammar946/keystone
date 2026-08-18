@@ -1,7 +1,101 @@
 {
-  "run_id": "run_hitl_001",
+  "run_id": "run_9ae43db9",
+  "capability_id": "corebank.account.open_subaccount",
+  "version": "1.0.0",
   "session_id": "sess_hitl_demo_402",
   "status": "SUCCESS",
-  "capability_id": "corebank.account.open_subaccount",
-  "hitl_interventions": 1
+  "outcome_code": null,
+  "message": "Replay completed successfully.",
+  "outputs": {
+    "new_account_number": "00910042-010",
+    "confirmed_deposit": 500.0
+  },
+  "steps_executed": 6,
+  "duration_ms": 267.6088809967041,
+  "step_trace": [
+    {
+      "step_id": "step_enter_member_id",
+      "action": "type",
+      "target_description": "Target member ID input field",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.98,
+      "duration_ms": 46.63991928100586,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_select_product",
+      "action": "select",
+      "target_description": "Account product dropdown selector",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.95,
+      "duration_ms": 9.557008743286133,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_enter_deposit",
+      "action": "type",
+      "target_description": "Deposit amount number input",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.95,
+      "duration_ms": 16.227006912231445,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_click_proceed",
+      "action": "click",
+      "target_description": "Proceed to authorization button",
+      "matched_strategy": "accessibility",
+      "strategy_confidence": 0.95,
+      "duration_ms": 81.4971923828125,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_authorize_creation",
+      "action": "click",
+      "target_description": "Authorize creation confirmation button inside security iframe",
+      "matched_strategy": "hitl_human_takeover",
+      "strategy_confidence": 1.0,
+      "duration_ms": 86.63702011108398,
+      "status": "SUCCESS",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": "step_extract_confirmation",
+      "action": "extract",
+      "target_description": null,
+      "matched_strategy": "N/A",
+      "strategy_confidence": 1.0,
+      "duration_ms": 26.890277862548828,
+      "status": "SUCCESS",
+      "extracted_data": {
+        "new_account_number": "00910042-010",
+        "confirmed_deposit": 500.0
+      },
+      "error_message": null
+    }
+  ],
+  "error": null,
+  "human_interventions": [
+    {
+      "session_id": "sess_hitl_demo_402",
+      "capability_id": "corebank.account.open_subaccount",
+      "step_id": "step_authorize_creation",
+      "step_index": 5,
+      "reason": "Step 'step_authorize_creation' contains high-risk/irreversible action ('Authorize and bind creation in Core Banking Ledger (IRREVERSIBLE)'). Requires human intervention.",
+      "risk_level": "HIGH_RISK",
+      "timestamp": 1787034477.904285,
+      "screenshot_path": "evidence/replay-hitl/intervention_sess_hitl_demo_402_step_5.png",
+      "current_owner": "HUMAN",
+      "status": "AWAITING_HUMAN"
+    }
+  ]
 }

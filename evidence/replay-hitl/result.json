@@ -1,7 +1,8 @@
 {
-  "session_id": "sess_hitl_demo_402",
   "status": "SUCCESS",
-  "new_account_number": "00910042-03",
-  "confirmed_deposit": "$500.00",
-  "human_actions_recorded": 1
+  "outputs": {
+    "new_account_number": "00910042-010",
+    "confirmed_deposit": 500.0
+  },
+  "interventions": 1
 }

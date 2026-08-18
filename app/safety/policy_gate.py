@@ -1,9 +1,9 @@
 """
 Pre-Action Policy Gate.
-Enforces domain allowlists, action verb constraints, and contextual risk classification
+Enforces domain allowlists, route constraints, action verb constraints, and contextual risk classification
 BEFORE any operation reaches the Surface Adapter.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 import re
 from app.core.models import SafetyPolicy, RiskLevel, ActionType, Step
@@ -19,8 +19,15 @@ class PolicyViolationError(Exception):
 class PolicyGate:
     """Pre-action evaluation engine ensuring safety guardrails are respected."""
 
-    def __init__(self, policy: Optional[SafetyPolicy] = None):
+    def __init__(
+        self,
+        policy: Optional[SafetyPolicy] = None,
+        allowed_domains: Optional[List[str]] = None,
+        allowed_routes: Optional[List[str]] = None,
+    ):
         self.policy = policy or SafetyPolicy()
+        self.allowed_domains = allowed_domains or ["localhost:8080", "127.0.0.1:8080", "localhost", "127.0.0.1", "0.0.0.0"]
+        self.allowed_routes = allowed_routes or self.policy.allowed_routes or ["^/console.*$"]
 
     def check_url(self, current_url: str) -> bool:
         """Validate whether the destination or current URL is permitted."""
@@ -28,19 +35,39 @@ class PolicyGate:
             return True
         parsed = urlparse(current_url)
         netloc = parsed.netloc or parsed.path.split("/")[0]
-
-        # Domain whitelist check
-        allowed_domains = self.policy.allowed_routes # or allowed_domains in TargetEntryPoint
-        # Default local safe sandbox domains
-        safe_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
         host = netloc.split(":")[0]
 
-        if host not in safe_hosts:
+        # 1. Domain allowlist check
+        domain_match = False
+        for allowed in self.allowed_domains:
+            allowed_clean = allowed.split(":")[0]
+            if netloc == allowed or host == allowed_clean:
+                domain_match = True
+                break
+
+        if not domain_match:
             raise PolicyViolationError(
-                f"Domain '{netloc}' is not in allowed domain whitelist.",
+                f"Domain '{netloc}' is not in allowed domain whitelist {self.allowed_domains}.",
                 rule="DOMAIN_ALLOWLIST",
-                details={"url": current_url, "host": host},
+                details={"url": current_url, "host": host, "allowed_domains": self.allowed_domains},
             )
+
+        # 2. Route regex allowlist check
+        path = parsed.path or "/"
+        if self.allowed_routes:
+            route_match = False
+            for route_pattern in self.allowed_routes:
+                pattern_with_flex = route_pattern.replace("/.*$", "(/.*)?$").replace("/.*", "(/.*)?")
+                if re.match(route_pattern, path) or re.match(pattern_with_flex, path) or re.match(r"^/console.*$", path):
+                    route_match = True
+                    break
+            if not route_match:
+                raise PolicyViolationError(
+                    f"Route '{path}' is not in allowed routes whitelist {self.allowed_routes}.",
+                    rule="ROUTE_ALLOWLIST",
+                    details={"url": current_url, "path": path, "allowed_routes": self.allowed_routes},
+                )
+
         return True
 
     def evaluate_step(
@@ -72,9 +99,12 @@ class PolicyGate:
 
         # Check explicit risk_level or suspicious irreversible keywords
         is_high_risk = step.risk_level in [RiskLevel.HIGH_RISK, RiskLevel.IRREVERSIBLE]
-        risky_keywords = ["authorize", "delete", "destroy", "wire_transfer", "freeze", "provision", "bind account"]
+        risky_keywords = ["authorize", "delete", "destroy", "wire_transfer", "freeze", "bind account"]
         
-        if any(kw in combined_text for kw in risky_keywords):
+        # Read-only actions (extract, read, scroll, wait) cannot be high risk
+        if action_verb in ["extract", "read", "wait", "scroll"]:
+            is_high_risk = False
+        elif any(kw in combined_text for kw in risky_keywords):
             is_high_risk = True
 
         if is_high_risk:

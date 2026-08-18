@@ -1,12 +1,15 @@
 """
 Deterministic Replay Engine (Zero-LLM Production Execution Engine).
-Replays compiled capability artifacts with caller inputs, evaluates locators,
-extracts typed outputs, and classifies outcomes into the 3-Tier Error Taxonomy.
+Replays compiled capability artifacts with caller inputs, evaluates cascading locators,
+extracts typed outputs, and classifies outcomes into the 3-Tier Error Taxonomy with
+native Human-in-the-Loop (HITL) same-session live escalation support.
 """
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 import time
 import uuid
 import re
+import os
+import json
 from app.core.models import (
     CapabilityArtifact,
     Step,
@@ -20,18 +23,25 @@ from app.core.error_taxonomy import (
     StepExecutionRecord,
     DiagnosticContext,
 )
-from app.core.surface_adapter import SurfaceAdapter
+from app.core.surface_adapter import SurfaceAdapter, ControlOwner, ExecutionState
 from app.adapters.playwright_adapter import PlaywrightSurfaceAdapter
 from app.safety.policy_gate import PolicyGate, PolicyViolationError
 from app.engine.checkpoint_engine import CheckpointEngine
 from app.engine.recovery_handler import RecoveryHandler
+from app.hitl.escalation_manager import HITLEscalationManager
 
 
 class DeterministicReplayEngine:
     """Pure deterministic capability replay engine with Zero LLM in the loop."""
 
-    def __init__(self, surface_adapter: Optional[SurfaceAdapter] = None):
+    def __init__(
+        self,
+        surface_adapter: Optional[SurfaceAdapter] = None,
+        escalation_manager: Optional[HITLEscalationManager] = None,
+    ):
         self.surface: Optional[SurfaceAdapter] = surface_adapter
+        self.escalation_manager: Optional[HITLEscalationManager] = escalation_manager
+        self.recovery_handler = RecoveryHandler()
         self._owns_surface: bool = (surface_adapter is None)
 
     def _interpolate_value(self, template: Optional[str], inputs: Dict[str, Any]) -> str:
@@ -75,6 +85,10 @@ class DeterministicReplayEngine:
         tenant_override: Optional[TenantOverride] = None,
         headless: bool = True,
         external_session_id: Optional[str] = None,
+        enable_hitl: bool = True,
+        auto_approve_hitl: bool = False,
+        hitl_callback: Optional[Callable] = None,
+        evidence_dir: Optional[str] = None,
     ) -> ReplayResult:
         """
         Execute deterministic replay of a capability artifact.
@@ -84,6 +98,7 @@ class DeterministicReplayEngine:
         start_time = time.time()
         step_traces: List[StepExecutionRecord] = []
         extracted_outputs: Dict[str, Any] = {}
+        human_interventions: List[Dict[str, Any]] = []
 
         # 1. Base URL & Route Resolution
         base_url = (
@@ -99,10 +114,26 @@ class DeterministicReplayEngine:
             await self.surface.initialize(session_id=session_id, entry_point=entry_point, headless=headless)
             self._owns_surface = True
 
-        policy_gate = PolicyGate(policy=artifact.policy)
+        # 3. Escalation Manager Setup
+        if enable_hitl and self.escalation_manager is None:
+            self.escalation_manager = HITLEscalationManager(
+                surface=self.surface,
+                evidence_dir=evidence_dir or "evidence/replay-hitl",
+            )
+
+        # 4. Policy Gate with Dynamic Domain & Route allowlist
+        allowed_domains = artifact.entry_point.allowed_domains
+        if tenant_override and tenant_override.base_url:
+            allowed_domains = allowed_domains + [tenant_override.base_url.split("://")[-1]]
+
+        policy_gate = PolicyGate(
+            policy=artifact.policy,
+            allowed_domains=allowed_domains,
+            allowed_routes=artifact.policy.allowed_routes,
+        )
 
         try:
-            # 3. Top-Level Preconditions Check
+            # 5. Top-Level Preconditions Check
             for pre in artifact.preconditions:
                 passed = await CheckpointEngine.evaluate_precondition(pre, self.surface)
                 if not passed:
@@ -118,7 +149,7 @@ class DeterministicReplayEngine:
                         step_trace=step_traces,
                     )
 
-            # 4. Sequential Step Execution
+            # 6. Sequential Step Execution
             for step_idx, step in enumerate(artifact.steps):
                 step_start = time.time()
                 current_state = await self.surface.observe(capture_screenshot=False)
@@ -130,29 +161,105 @@ class DeterministicReplayEngine:
                     human_approved=False,
                 )
 
+                # B. High-Risk / Irreversible Action Encountered
                 if policy_decision["decision"] == "REQUIRE_HITL":
-                    # Roadblock / Irreversible High-Risk action reached without prior approval
-                    return ReplayResult(
-                        run_id=run_id,
-                        capability_id=artifact.capability_id,
-                        version=artifact.version,
-                        session_id=session_id,
-                        status=OutcomeType.ESCALATED,
-                        outcome_code="HIGH_RISK_GATE",
-                        message=policy_decision["reason"],
-                        steps_executed=step_idx,
-                        duration_ms=(time.time() - start_time) * 1000,
-                        step_trace=step_traces,
-                        error=DiagnosticContext(
-                            step_id=step.id,
-                            step_index=step_idx,
-                            current_url=current_state.url_or_window,
-                            expected="Human Authorization",
-                            observed="Blocked by Pre-Action Safety Gate",
-                        ),
-                    )
+                    if enable_hitl and self.escalation_manager:
+                        # 1. Raise Intervention Package on the same live session
+                        intervention_pkg = await self.escalation_manager.raise_intervention_request(
+                            capability_id=artifact.capability_id,
+                            step=step,
+                            step_index=step_idx + 1,
+                            reason=policy_decision["reason"],
+                        )
+                        human_interventions.append(intervention_pkg)
 
-                # B. Execute Action on Surface
+                        # 2. Operator Resolution Seam
+                        if auto_approve_hitl:
+                            # Auto-approve takeover: perform action in iframe and confirm
+                            if step.target:
+                                resolved_elem = await self.surface.resolve_target(
+                                    step.target.model_dump(),
+                                    timeout_ms=step.timeout_ms,
+                                    scope=step.target.scope,
+                                    frame_context=step.target.frame_context,
+                                )
+                                await self.surface.click(resolved_elem)
+                            await self.escalation_manager.complete_human_takeover(
+                                operator_id="operator_lead_01",
+                                action_taken=f"Authorized high-risk step '{step.id}'",
+                                resume_signal=True,
+                            )
+                            self.escalation_manager.confirm_resumption_complete()
+
+                        elif hitl_callback:
+                            # Custom operator callback
+                            resumed = await hitl_callback(self.surface, step, intervention_pkg)
+                            if not resumed:
+                                return ReplayResult(
+                                    run_id=run_id,
+                                    capability_id=artifact.capability_id,
+                                    version=artifact.version,
+                                    session_id=session_id,
+                                    status=OutcomeType.HARD_FAILURE,
+                                    message="Human operator aborted intervention.",
+                                    steps_executed=step_idx + 1,
+                                    duration_ms=(time.time() - start_time) * 1000,
+                                    step_trace=step_traces,
+                                    human_interventions=human_interventions,
+                                )
+                            self.escalation_manager.confirm_resumption_complete()
+                        else:
+                            # Return ESCALATED state if unattended without interactive takeover
+                            return ReplayResult(
+                                run_id=run_id,
+                                capability_id=artifact.capability_id,
+                                version=artifact.version,
+                                session_id=session_id,
+                                status=OutcomeType.ESCALATED,
+                                outcome_code="HIGH_RISK_GATE",
+                                message=policy_decision["reason"],
+                                steps_executed=step_idx,
+                                duration_ms=(time.time() - start_time) * 1000,
+                                step_trace=step_traces,
+                                human_interventions=human_interventions,
+                                error=DiagnosticContext(
+                                    step_id=step.id,
+                                    step_index=step_idx,
+                                    current_url=current_state.url_or_window,
+                                    expected="Human Authorization",
+                                    observed="Blocked by Pre-Action Safety Gate",
+                                ),
+                            )
+
+                        # Step trace for resumed action
+                        step_traces.append(
+                            StepExecutionRecord(
+                                step_id=step.id,
+                                action=step.action.value,
+                                target_description=step.target.description if step.target else None,
+                                matched_strategy="hitl_human_takeover",
+                                strategy_confidence=1.0,
+                                duration_ms=(time.time() - step_start) * 1000,
+                                status="SUCCESS",
+                            )
+                        )
+                        continue
+                    else:
+                        # Escalation disabled
+                        return ReplayResult(
+                            run_id=run_id,
+                            capability_id=artifact.capability_id,
+                            version=artifact.version,
+                            session_id=session_id,
+                            status=OutcomeType.ESCALATED,
+                            outcome_code="HIGH_RISK_GATE",
+                            message=policy_decision["reason"],
+                            steps_executed=step_idx,
+                            duration_ms=(time.time() - start_time) * 1000,
+                            step_trace=step_traces,
+                        )
+
+                # C. Normal Step Execution on Surface
                 resolved_elem = None
                 matched_strategy = "N/A"
                 confidence = 1.0
@@ -201,7 +308,7 @@ class DeterministicReplayEngine:
 
                 except Exception as step_err:
                     # Attempt Bounded Runtime Recovery
-                    recovered = await RecoveryHandler.try_recover(step, self.surface, step_err)
+                    recovered = await self.recovery_handler.try_recover(step, self.surface, step_err)
                     if recovered:
                         # Retry Step once after recovery
                         if step.target:
@@ -235,6 +342,7 @@ class DeterministicReplayEngine:
                             steps_executed=step_idx + 1,
                             duration_ms=(time.time() - start_time) * 1000,
                             step_trace=step_traces,
+                            human_interventions=human_interventions,
                             error=DiagnosticContext(
                                 step_id=step.id,
                                 step_index=step_idx,
@@ -244,7 +352,7 @@ class DeterministicReplayEngine:
                             ),
                         )
 
-                # C. Checkpoint & Branch Evaluation
+                # D. Checkpoint & Branch Evaluation
                 eval_res = await CheckpointEngine.evaluate_postcondition(
                     step.postcondition,
                     self.surface,
@@ -279,6 +387,7 @@ class DeterministicReplayEngine:
                         steps_executed=step_idx + 1,
                         duration_ms=(time.time() - start_time) * 1000,
                         step_trace=step_traces,
+                        human_interventions=human_interventions,
                     )
 
                 if not eval_res.passed:
@@ -292,9 +401,10 @@ class DeterministicReplayEngine:
                         steps_executed=step_idx + 1,
                         duration_ms=(time.time() - start_time) * 1000,
                         step_trace=step_traces,
+                        human_interventions=human_interventions,
                     )
 
-            # 5. Final Capability Postconditions
+            # 7. Final Capability Postconditions
             for post in artifact.postconditions:
                 post_res = await CheckpointEngine.evaluate_postcondition(post, self.surface, extracted_data=extracted_outputs)
                 if not post_res.passed:
@@ -308,7 +418,11 @@ class DeterministicReplayEngine:
                         steps_executed=len(artifact.steps),
                         duration_ms=(time.time() - start_time) * 1000,
                         step_trace=step_traces,
+                        human_interventions=human_interventions,
                     )
+
+            if self.escalation_manager:
+                self.escalation_manager.mark_completed()
 
             # Execution Succeeded Cleanly
             return ReplayResult(
@@ -322,6 +436,7 @@ class DeterministicReplayEngine:
                 steps_executed=len(artifact.steps),
                 duration_ms=(time.time() - start_time) * 1000,
                 step_trace=step_traces,
+                human_interventions=human_interventions,
             )
 
         finally:

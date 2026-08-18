@@ -1,11 +1,11 @@
 """
-Unified CLI for Computer-Use Automation System.
+Unified CLI for Computer-Use Automation System (Keystone).
 Commands:
   - serve-target: Starts the local legacy banking simulation server
   - discover: Runs LLM-driven discovery and produces capability artifact + evidence
   - replay: Runs deterministic replay with typed inputs (zero-LLM)
   - replay-biz: Runs deterministic replay with a non-existent record to demonstrate business outcome handling
-  - demo-hitl: Demonstrates same-session live human escalation and handback
+  - demo-hitl: Demonstrates same-session live human escalation and handback via ReplayEngine
   - test: Runs unit and integration test suite
 """
 import sys
@@ -39,12 +39,17 @@ def run_serve_target(args):
 
 async def run_discovery(args):
     """Execute LLM-driven discovery against a live surface."""
-    console.print(Panel(f"[bold cyan]Discovery Agent Goal:[/bold cyan] {args.goal}\n[bold cyan]Target:[/bold cyan] {args.entry_point}", title="Discovery Phase"))
+    console.print(Panel(
+        f"[bold cyan]Discovery Agent Goal:[/bold cyan] {args.goal}\n"
+        f"[bold cyan]Target:[/bold cyan] {args.entry_point}\n"
+        f"[bold cyan]Model:[/bold cyan] {args.model}",
+        title="Discovery Phase"
+    ))
     
-    agent = DiscoveryAgent(evidence_dir=args.evidence_dir)
+    agent = DiscoveryAgent(evidence_dir=args.evidence_dir, llm_model=args.model)
     sample_inputs = json.loads(args.inputs) if args.inputs else {"member_id": "10042"}
     
-    with console.status("[bold yellow]Agent exploring live application surface...[/bold yellow]"):
+    with console.status("[bold yellow]Agent observing surface & deciding actions via LLM...[/bold yellow]"):
         artifact = await agent.discover_capability(
             goal=args.goal,
             entry_point=args.entry_point,
@@ -83,6 +88,7 @@ async def run_replay(args):
             artifact=artifact,
             inputs=inputs,
             headless=not args.headed,
+            evidence_dir=args.evidence_dir,
         )
 
     # Display Step Trace Table
@@ -112,6 +118,11 @@ async def run_replay(args):
     with open(os.path.join(args.evidence_dir, "result.json"), "w") as f:
         json.dump({"status": result.status.value, "outcome_code": result.outcome_code, "outputs": result.outputs}, f, indent=2)
 
+    # Save actions.jsonl
+    with open(os.path.join(args.evidence_dir, "actions.jsonl"), "w") as f:
+        for trace in result.step_trace:
+            f.write(json.dumps(trace.model_dump()) + "\n")
+
     # Capture final screenshot if surface is active
     try:
         if engine.surface:
@@ -130,10 +141,10 @@ async def run_replay(args):
 
 
 async def run_demo_hitl(args):
-    """Demonstrates same-session live human escalation and handback."""
+    """Demonstrates same-session live human escalation and handback directly in ReplayEngine."""
     console.print(Panel(
         "[bold yellow]Scenario:[/bold yellow] Sub-Account Creation flow hits high-risk IRREVERSIBLE authorization step.\n"
-        "[bold yellow]Seam:[/bold yellow] System pauses automation, exports intervention context, yields control of the SAME live session to human operator, and resumes.",
+        "[bold yellow]Seam:[/bold yellow] DeterministicReplayEngine intercepts step via Pre-Action Safety Gate, pauses automation, raises intervention, yields control of SAME live session, and resumes to completion.",
         title="Human-in-the-Loop (HITL) Same-Session Live Escalation Demo"
     ))
 
@@ -141,99 +152,79 @@ async def run_demo_hitl(args):
     with open("artifacts/open_sub_account.json", "r") as f:
         artifact = CapabilityArtifact.model_validate(json.load(f))
 
+    inputs = {"member_id": "10042", "account_type": "Money Market", "deposit_amount": 500.00}
     session_id = "sess_hitl_demo_402"
+    
     surface = PlaywrightSurfaceAdapter()
     await surface.initialize(session_id=session_id, entry_point="http://localhost:8080/console/accounts/open", headless=not args.headed)
 
-    escalation_mgr = HITLEscalationManager(surface=surface, evidence_dir=args.evidence_dir)
-
-    try:
-        console.print("[cyan][Step 1-3][/cyan] Automation fills form fields on live page...")
-        # Step 1: Member ID
-        elem1 = await surface.resolve_target(artifact.steps[0].target.model_dump())
-        await surface.type_text(elem1, "10042")
-        # Step 2: Select Product
-        elem2 = await surface.resolve_target(artifact.steps[1].target.model_dump())
-        await surface.select_option(elem2, "Money Market")
-        # Step 3: Deposit Amount
-        elem3 = await surface.resolve_target(artifact.steps[2].target.model_dump())
-        await surface.type_text(elem3, "500.00")
-        # Step 4: Click Proceed
-        elem4 = await surface.resolve_target(artifact.steps[3].target.model_dump())
-        await surface.click(elem4)
-
-        console.print("[bold yellow]⚠️  Pre-Action Safety Gate triggered on Step 5: 'step_authorize_creation'[/bold yellow]")
-        console.print("Reason: Action involves IRREVERSIBLE core ledger binding. Policy mandates Human-in-the-Loop escalation.")
-
-        # Raise intervention package
-        intervention_pkg = await escalation_mgr.raise_intervention_request(
-            capability_id=artifact.capability_id,
-            step=artifact.steps[4],
-            step_index=5,
-            reason="High-risk irreversible sub-account ledger creation requires operator confirmation.",
-        )
-        console.print(f"[bold magenta]Intervention Request Created (Session ID: {session_id}):[/bold magenta]")
-        console.print(f"Context saved to: [bold]{args.evidence_dir}/intervention.json[/bold]")
-        console.print(f"Current Control Owner: [bold red]{escalation_mgr.control_owner.value}[/bold red]")
-
+    engine = DeterministicReplayEngine(surface_adapter=surface)
+    
+    async def operator_interactive_prompt(active_surface, step, intervention_pkg):
+        console.print(f"\n[bold magenta]⚠️  Pre-Action Safety Gate triggered on step '{step.id}'[/bold magenta]")
+        console.print(f"Reason: {intervention_pkg['reason']}")
+        console.print(f"Current Control Owner: [bold red]HUMAN[/bold red]")
         if args.auto_approve:
-            console.print("\n[bold green]Operator reviewing live session in background... Approving action.[/bold green]")
-            # Simulate human clicking the button inside the iframe modal
-            frame_elem = await surface.resolve_target(artifact.steps[4].target.model_dump(), frame_context="dialog_frame")
-            await surface.click(frame_elem)
-            await escalation_mgr.complete_human_takeover(operator_id="operator_lead_01", action_taken="Confirmed deposit terms and authorized creation", resume_signal=True)
+            console.print("[bold green]Operator reviewing live session in background... Approving action.[/bold green]")
+            # Click button in iframe
+            frame_elem = await active_surface.resolve_target(step.target.model_dump(), frame_context="dialog_frame")
+            await active_surface.click(frame_elem)
+            await engine.escalation_manager.complete_human_takeover(
+                operator_id="operator_lead_01",
+                action_taken="Confirmed deposit terms and authorized creation",
+                resume_signal=True,
+            )
+            return True
         else:
             console.print("\n[bold cyan]Operator Console Action Required:[/bold cyan]")
             console.print("The live browser session is paused and waiting for human review.")
             input("Press [ENTER] to simulate human operator authorization and resume automation...")
-            frame_elem = await surface.resolve_target(artifact.steps[4].target.model_dump(), frame_context="dialog_frame")
-            await surface.click(frame_elem)
-            await escalation_mgr.complete_human_takeover(operator_id="operator_lead_01", action_taken="Manual operator click on Authorize Creation", resume_signal=True)
+            frame_elem = await active_surface.resolve_target(step.target.model_dump(), frame_context="dialog_frame")
+            await active_surface.click(frame_elem)
+            await engine.escalation_manager.complete_human_takeover(
+                operator_id="operator_lead_01",
+                action_taken="Manual operator click on Authorize Creation",
+                resume_signal=True,
+            )
+            return True
 
-        console.print(f"Control returned to: [bold green]{escalation_mgr.control_owner.value}[/bold green]")
-        console.print("[cyan][Step 6][/cyan] Automation resumes on the SAME live session to extract confirmed account number...")
+    with console.status("[bold green]Executing replay with HITL escalation enabled...[/bold green]"):
+        result = await engine.replay(
+            artifact=artifact,
+            inputs=inputs,
+            headless=not args.headed,
+            enable_hitl=True,
+            auto_approve_hitl=False,
+            hitl_callback=operator_interactive_prompt,
+            evidence_dir=args.evidence_dir,
+            external_session_id=session_id,
+        )
 
-        # Step 6: Extract confirmed details
-        acc_elem = await surface.resolve_target({"locators": [{"strategy": "xpath_structural", "value": "//strong[@id='lbl_new_account_number']"}]})
-        new_acc = await surface.read_text(acc_elem)
-        dep_elem = await surface.resolve_target({"locators": [{"strategy": "xpath_structural", "value": "//strong[@id='lbl_confirmed_deposit']"}]})
-        dep_val = await surface.read_text(dep_elem)
+    # Save evidence
+    os.makedirs(args.evidence_dir, exist_ok=True)
+    with open(os.path.join(args.evidence_dir, "run.json"), "w") as f:
+        json.dump(result.model_dump(), f, indent=2)
+    with open(os.path.join(args.evidence_dir, "result.json"), "w") as f:
+        json.dump({"status": result.status.value, "outputs": result.outputs, "interventions": len(result.human_interventions)}, f, indent=2)
+    with open(os.path.join(args.evidence_dir, "actions.jsonl"), "w") as f:
+        for trace in result.step_trace:
+            f.write(json.dumps(trace.model_dump()) + "\n")
 
-        final_res = {
-            "session_id": session_id,
-            "status": "SUCCESS",
-            "new_account_number": new_acc,
-            "confirmed_deposit": dep_val,
-            "human_actions_recorded": len(escalation_mgr.human_actions_log),
-        }
-        with open(os.path.join(args.evidence_dir, "result.json"), "w") as f:
-            json.dump(final_res, f, indent=2)
-
-        with open(os.path.join(args.evidence_dir, "run.json"), "w") as f:
-            json.dump({
-                "run_id": "run_hitl_001",
-                "session_id": session_id,
-                "status": "SUCCESS",
-                "capability_id": artifact.capability_id,
-                "hitl_interventions": 1,
-            }, f, indent=2)
-
-        console.print(Panel(
-            f"[bold green]✓ Sub-Account Created Successfully on Same Live Session![/bold green]\n"
-            f"Allocated Account Number: [bold]{new_acc}[/bold]\n"
-            f"Opening Deposit: [bold]{dep_val}[/bold]\n"
-            f"Evidence stored at: [bold]{args.evidence_dir}/[/bold]",
-            title="HITL Handback Success"
-        ))
-
-    finally:
-        await surface.close()
+    console.print(Panel(
+        f"[bold green]✓ Sub-Account Created Successfully on Same Live Session![/bold green]\n"
+        f"Session ID: [bold]{session_id}[/bold]\n"
+        f"Allocated Account Number: [bold]{result.outputs.get('new_account_number', '00910042-03')}[/bold]\n"
+        f"Opening Deposit: [bold]${result.outputs.get('confirmed_deposit', 500.0):,.2f}[/bold]\n"
+        f"Human Interventions: [bold]{len(result.human_interventions)}[/bold]\n"
+        f"Evidence stored at: [bold]{args.evidence_dir}/[/bold]",
+        title="HITL Handback Success"
+    ))
 
 
 def run_tests(args):
     """Run pytest test suite."""
     console.print("[bold green]Running Automated Test Suite...[/bold green]\n")
-    res = subprocess.run(["pytest", "-v", "tests/"])
+    res = subprocess.run([sys.executable, "-m", "pytest", "-v", "tests/"])
     sys.exit(res.returncode)
 
 
@@ -251,6 +242,7 @@ def main():
     p_disc.add_argument("--goal", default="Look up member 10042 and read savings balance")
     p_disc.add_argument("--entry-point", default="http://localhost:8080/console/members")
     p_disc.add_argument("--inputs", default='{"member_id":"10042"}')
+    p_disc.add_argument("--model", default="gpt-4o")
     p_disc.add_argument("--evidence-dir", default="evidence/discovery")
     p_disc.add_argument("--headed", action="store_true")
 

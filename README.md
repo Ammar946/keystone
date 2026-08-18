@@ -43,7 +43,7 @@ keystone/
 │   ├── replay-success/                # Deterministic replay logs & extracted outputs
 │   ├── replay-business-outcome/       # Expected business outcome (Record Not Found) logs
 │   └── replay-hitl/                   # Same-session live intervention & human takeover logs
-├── tests/                             # Full automated test suite (12 tests)
+├── tests/                             # Full automated test suite (15 tests)
 ├── cli.py                             # Unified CLI entry point
 ├── REPORT.md                          # 7-Section comprehensive architecture report
 └── README.md
@@ -60,7 +60,7 @@ keystone/
 ### 2. Installation
 ```bash
 # Clone the repository and navigate into the workspace
-git clone https://github.com/<your-username>/keystone.git
+git clone https://github.com/Ammar946/keystone.git
 cd keystone
 
 # Create virtual environment and activate

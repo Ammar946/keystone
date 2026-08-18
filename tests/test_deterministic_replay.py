@@ -18,14 +18,23 @@ from app.engine.replay_engine import DeterministicReplayEngine
 
 @pytest.fixture(scope="session", autouse=True)
 def run_target_server():
-    """Start local mock banking server for test session."""
-    config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8080, log_level="error")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    time.sleep(1.0) # Wait for server to bind
+    """Start local mock banking server for test session if not already running."""
+    import socket
+    sock = socket.socket(socket.AF_SOCKET if hasattr(socket, "AF_SOCKET") else socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex(('127.0.0.1', 8080))
+    sock.close()
+    
+    server = None
+    if result != 0:
+        # Port is free, start server
+        config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8080, log_level="error")
+        server = uvicorn.Server(config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        time.sleep(1.0)
     yield
-    server.should_exit = True
+    if server:
+        server.should_exit = True
 
 
 @pytest.mark.asyncio

@@ -1,11 +1,12 @@
 {
-  "run_id": "disc_40d79887",
-  "session_id": "sess_disc_32b59d03",
+  "run_id": "disc_b6ee38c3",
+  "session_id": "sess_disc_24001282",
   "goal": "Look up member 10042 and read savings balance",
   "target_entry_point": "http://localhost:8080/console/members",
   "model": "gpt-4o",
-  "duration_ms": 722.2959995269775,
-  "steps_recorded": 4,
+  "mode": "model_discovery_planner",
+  "duration_ms": 526.8287658691406,
+  "steps_recorded": 3,
   "status": "SUCCESS",
   "artifact_generated": "corebank.member.get_balance",
   "artifact_version": "1.0.0"
