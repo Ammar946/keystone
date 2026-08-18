@@ -1,7 +1,7 @@
 """
 Pre-Action Policy Gate.
-Enforces domain allowlists, route constraints, action verb constraints, and contextual risk classification
-BEFORE any operation reaches the Surface Adapter.
+Enforces strict domain/port allowlists, route constraints, action verb constraints,
+and contextual risk classification BEFORE any operation reaches the Surface Adapter.
 """
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
@@ -26,8 +26,8 @@ class PolicyGate:
         allowed_routes: Optional[List[str]] = None,
     ):
         self.policy = policy or SafetyPolicy()
-        self.allowed_domains = allowed_domains or ["localhost:8080", "127.0.0.1:8080", "localhost", "127.0.0.1", "0.0.0.0"]
-        self.allowed_routes = allowed_routes or self.policy.allowed_routes or ["^/console.*$"]
+        self.allowed_domains = allowed_domains or ["localhost:8080", "127.0.0.1:8080"]
+        self.allowed_routes = allowed_routes or self.policy.allowed_routes or ["^/console(/.*)?$"]
 
     def check_url(self, current_url: str) -> bool:
         """Validate whether the destination or current URL is permitted."""
@@ -37,29 +37,34 @@ class PolicyGate:
         netloc = parsed.netloc or parsed.path.split("/")[0]
         host = netloc.split(":")[0]
 
-        # 1. Domain allowlist check
+        # 1. Strict Domain & Port allowlist check
         domain_match = False
         for allowed in self.allowed_domains:
-            allowed_clean = allowed.split("://")[-1].split("/")[0].split(":")[0]
-            allowed_full = allowed.split("://")[-1].split("/")[0]
-            if netloc == allowed_full or host == allowed_clean:
-                domain_match = True
-                break
+            allowed_clean = allowed.split("://")[-1].split("/")[0]
+            if ":" in allowed_clean:
+                # Port is explicitly specified in policy -> require exact netloc match
+                if netloc == allowed_clean:
+                    domain_match = True
+                    break
+            else:
+                # Host-level allowlist -> match host
+                if host == allowed_clean or netloc == allowed_clean:
+                    domain_match = True
+                    break
 
         if not domain_match:
             raise PolicyViolationError(
                 f"Domain '{netloc}' is not in allowed domain whitelist {self.allowed_domains}.",
                 rule="DOMAIN_ALLOWLIST",
-                details={"url": current_url, "host": host, "allowed_domains": self.allowed_domains},
+                details={"url": current_url, "netloc": netloc, "allowed_domains": self.allowed_domains},
             )
 
-        # 2. Route regex allowlist check
+        # 2. Strict Route regex allowlist check (no hardcoded bypasses)
         path = parsed.path or "/"
         if self.allowed_routes:
             route_match = False
             for route_pattern in self.allowed_routes:
-                pattern_with_flex = route_pattern.replace("/.*$", "(/.*)?$").replace("/.*", "(/.*)?")
-                if re.match(route_pattern, path) or re.match(pattern_with_flex, path) or re.match(r"^/console.*$", path):
+                if re.match(route_pattern, path):
                     route_match = True
                     break
             if not route_match:

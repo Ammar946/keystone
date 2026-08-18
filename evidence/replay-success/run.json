@@ -1,8 +1,8 @@
 {
-  "run_id": "run_182f6502",
+  "run_id": "run_255eb76f",
   "capability_id": "corebank.member.get_balance",
   "version": "1.0.0",
-  "session_id": "sess_0c5b5b8e",
+  "session_id": "sess_36fcbe88",
   "status": "SUCCESS",
   "outcome_code": null,
   "message": "Replay completed successfully.",
@@ -13,7 +13,7 @@
     "checking_balance": 3210.5
   },
   "steps_executed": 3,
-  "duration_ms": 466.2141799926758,
+  "duration_ms": 479.98690605163574,
   "step_trace": [
     {
       "step_id": "step_enter_member_id",
@@ -21,7 +21,7 @@
       "target_description": "Member ID input field in search form",
       "matched_strategy": "accessibility",
       "strategy_confidence": 0.98,
-      "duration_ms": 51.19800567626953,
+      "duration_ms": 46.71907424926758,
       "status": "SUCCESS",
       "extracted_data": null,
       "error_message": null
@@ -32,7 +32,7 @@
       "target_description": "Search records submit button",
       "matched_strategy": "accessibility",
       "strategy_confidence": 0.96,
-      "duration_ms": 48.92110824584961,
+      "duration_ms": 48.29597473144531,
       "status": "SUCCESS",
       "extracted_data": null,
       "error_message": null
@@ -43,7 +43,7 @@
       "target_description": null,
       "matched_strategy": "N/A",
       "strategy_confidence": 1.0,
-      "duration_ms": 23.40412139892578,
+      "duration_ms": 24.00684356689453,
       "status": "SUCCESS",
       "extracted_data": {
         "member_name": "Jane Doe",

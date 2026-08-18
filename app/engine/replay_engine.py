@@ -189,7 +189,6 @@ class DeterministicReplayEngine:
                                 action_taken=f"Authorized high-risk step '{step.id}'",
                                 resume_signal=True,
                             )
-                            self.escalation_manager.confirm_resumption_complete()
 
                         elif hitl_callback:
                             # Custom operator callback
@@ -207,7 +206,6 @@ class DeterministicReplayEngine:
                                     step_trace=step_traces,
                                     human_interventions=human_interventions,
                                 )
-                            self.escalation_manager.confirm_resumption_complete()
                         else:
                             # Return ESCALATED state if unattended without interactive takeover
                             return ReplayResult(
@@ -231,7 +229,42 @@ class DeterministicReplayEngine:
                                 ),
                             )
 
-                        # Step trace for resumed action
+                        # 3. Postcondition Verification after Human Takeover
+                        eval_res = await CheckpointEngine.evaluate_postcondition(
+                            step.postcondition,
+                            self.surface,
+                            extracted_data=extracted_outputs,
+                        )
+                        if not eval_res.passed:
+                            self.escalation_manager.execution_state = ExecutionState.FAILED
+                            step_traces.append(
+                                StepExecutionRecord(
+                                    step_id=step.id,
+                                    action=step.action.value,
+                                    target_description=step.target.description if step.target else None,
+                                    matched_strategy="hitl_human_takeover",
+                                    strategy_confidence=1.0,
+                                    duration_ms=(time.time() - step_start) * 1000,
+                                    status="FAILED",
+                                    error_message=f"Postcondition failed: {eval_res.message}",
+                                )
+                            )
+                            return ReplayResult(
+                                run_id=run_id,
+                                capability_id=artifact.capability_id,
+                                version=artifact.version,
+                                session_id=session_id,
+                                status=OutcomeType.HARD_FAILURE,
+                                message=f"Postcondition check failed following human takeover on step '{step.id}': {eval_res.message}",
+                                steps_executed=step_idx + 1,
+                                duration_ms=(time.time() - start_time) * 1000,
+                                step_trace=step_traces,
+                                human_interventions=human_interventions,
+                            )
+
+                        # 4. Postconditions passed -> transition back to RUNNING_AUTOMATION and resume
+                        self.escalation_manager.confirm_resumption_complete()
+
                         step_traces.append(
                             StepExecutionRecord(
                                 step_id=step.id,

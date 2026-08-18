@@ -41,10 +41,10 @@ def test_pii_redactor_structured_dict():
 
 
 def test_policy_gate_domain_allowlist():
-    """Verify PolicyGate rejects disallowed target host domains."""
+    """Verify PolicyGate rejects disallowed target host domains and wrong ports."""
     gate = PolicyGate(allowed_domains=["localhost:8080", "127.0.0.1:8080"])
     
-    # Safe localhost domain
+    # Safe localhost domain with authorized port
     assert gate.check_url("http://localhost:8080/console/members") is True
     
     # Forbidden external domain
@@ -52,12 +52,17 @@ def test_policy_gate_domain_allowlist():
         gate.check_url("https://malicious-banking-phish.com/console/members")
     assert exc_info.value.rule == "DOMAIN_ALLOWLIST"
 
+    # Forbidden wrong port (e.g. 9999 when 8080 is specified)
+    with pytest.raises(PolicyViolationError) as exc_info_port:
+        gate.check_url("http://localhost:9999/console/members")
+    assert exc_info_port.value.rule == "DOMAIN_ALLOWLIST"
+
 
 def test_policy_gate_route_allowlist():
     """Verify PolicyGate rejects unauthorized routes outside the declared whitelist."""
     gate = PolicyGate(
         allowed_domains=["localhost:8080"],
-        allowed_routes=["^/console.*$"],
+        allowed_routes=["^/console(/.*)?$"],
     )
     
     # Allowed route
