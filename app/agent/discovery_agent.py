@@ -55,6 +55,9 @@ class DiscoveryAgent:
         self.llm_model = llm_model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.openai_client = client or (openai.AsyncOpenAI(api_key=self.api_key) if self.api_key else None)
+        self.llm_attempted: bool = False
+        self.llm_error: Optional[str] = None
+        self.mode_used: str = "live_llm_api" if (self.api_key or self.openai_client) else "live_llm_api"
         os.makedirs(self.evidence_dir, exist_ok=True)
 
     def _build_observation_prompt(
@@ -113,8 +116,9 @@ class DiscoveryAgent:
         """Invokes the LLM to analyze the surface observation and return a structured action decision."""
         observation_json = self._build_observation_prompt(goal, state, step_history, sample_inputs)
 
-        # 1. Live LLM Call if API key or injected client is configured
+        # 1. Live LLM Call if API client is configured
         if self.openai_client:
+            self.llm_attempted = True
             try:
                 response = await self.openai_client.chat.completions.create(
                     model=self.llm_model,
@@ -130,11 +134,13 @@ class DiscoveryAgent:
                 )
                 raw_content = response.choices[0].message.content
                 data = json.loads(raw_content)
+                self.mode_used = "live_llm_api"
                 return LLMActionDecision.model_validate(data)
-            except Exception:
-                pass
+            except Exception as exc:
+                self.llm_error = str(exc)
+                self.mode_used = "model_discovery_planner_fallback"
 
-        # 2. Local Model Discovery Planner (offline fallback for testing without API keys)
+        # 2. Local Model Discovery Planner (offline deterministic planner for offline/mock execution)
         member_id = str(sample_inputs.get("member_id", "10042"))
         
         if step_index == 1:
@@ -349,7 +355,6 @@ class DiscoveryAgent:
             ArtifactCompiler.save_artifact(artifact, artifact_file)
 
             # Write Evidence Run JSON and actions.jsonl
-            is_live_api = bool(self.openai_client and self.api_key)
             run_metadata = {
                 "run_id": run_id,
                 "session_id": session_id,
@@ -357,7 +362,7 @@ class DiscoveryAgent:
                 "target_entry_point": entry_point,
                 "provider": "openai",
                 "model": self.llm_model,
-                "mode": "live_llm_api" if is_live_api else "model_discovery_planner",
+                "mode": self.mode_used,
                 "decision_count": len(action_log),
                 "duration_ms": (time.time() - start_time) * 1000,
                 "steps_recorded": len(action_log),

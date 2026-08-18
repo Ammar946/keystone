@@ -5,7 +5,7 @@
   "step_index": 5,
   "reason": "Step 'step_authorize_creation' contains high-risk/irreversible action ('Authorize and bind creation in Core Banking Ledger (IRREVERSIBLE)'). Requires human intervention.",
   "risk_level": "HIGH_RISK",
-  "timestamp": 1787035657.335808,
+  "timestamp": 1787036035.341952,
   "screenshot_path": "evidence/replay-hitl/intervention_sess_hitl_demo_402_step_5.png",
   "current_owner": "HUMAN",
   "status": "AWAITING_HUMAN"

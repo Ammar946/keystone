@@ -16,13 +16,22 @@ from app.core.error_taxonomy import ReplayResult
 class HITLEscalationManager:
     """Manages same-session live escalation, context packaging, and control handback."""
 
-    def __init__(self, surface: SurfaceAdapter, evidence_dir: str = "evidence/replay-hitl"):
+    def __init__(
+        self,
+        surface: SurfaceAdapter,
+        evidence_dir: str = "evidence/replay-hitl",
+        clean_log: bool = False,
+    ):
         self.surface = surface
         self.evidence_dir = evidence_dir
         self.control_owner: ControlOwner = ControlOwner.AUTOMATION
         self.execution_state: ExecutionState = ExecutionState.RUNNING_AUTOMATION
         self.human_actions_log: List[Dict[str, Any]] = []
         os.makedirs(self.evidence_dir, exist_ok=True)
+        if clean_log:
+            log_path = os.path.join(self.evidence_dir, "human_actions.jsonl")
+            if os.path.exists(log_path):
+                open(log_path, "w").close()
 
     async def raise_intervention_request(
         self,

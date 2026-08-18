@@ -320,14 +320,14 @@
     "max_step_timeout_ms": 10000
   },
   "provenance": {
-    "discovery_run_id": "disc_f219ec44",
+    "discovery_run_id": "disc_ba30826c",
     "source_application": "Apex CoreBank Console v4.2",
     "source_variant": "legacy_default",
-    "discovered_at": "2026-08-18T06:47:31Z",
+    "discovered_at": "2026-08-18T06:53:49Z",
     "model": "gpt-4o",
     "compiler_version": "1.2.0"
   },
   "metadata": {
-    "session_id": "sess_disc_67e5f8f2"
+    "session_id": "sess_disc_2884bc79"
   }
 }

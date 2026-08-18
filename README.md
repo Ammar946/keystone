@@ -115,13 +115,18 @@ python cli.py replay-biz --artifact artifacts/get_member_balance.json --inputs '
 ### Step 5: Demonstrate Same-Session Human-in-the-Loop (HITL) Escalation
 Run the deposit sub-account creation workflow, which encounters an irreversible security authorization gate:
 ```bash
+# Automated evaluation / CI pipeline mode (simulates operator approval):
 python cli.py demo-hitl --auto-approve
+
+# Interactive human operator mode (pauses live browser and waits for operator input):
+python cli.py demo-hitl --headed
 ```
 - Automation fills out the form on the live browser page.
 - Pre-action safety gate intercepts the high-risk action (`step_authorize_creation`), pauses automation, and yields control (`ControlOwner = HUMAN`).
 - Emits `intervention.json` with live screenshot context on `session_id`.
 - The operator interacts on the **same live browser page**, authorizes the creation, and signals resume.
-- Automation regains control (`ControlOwner = AUTOMATION`), verifies the provisioned account reference, and saves complete audit logs in `/evidence/replay-hitl/`.
+- Engine evaluates the postcondition on the live session, automation regains control (`ControlOwner = AUTOMATION`), verifies the provisioned account reference, and saves audit logs in `/evidence/replay-hitl/`.
+> **Note on HITL Modes**: `--auto-approve` is provided for deterministic automated demonstration and headless CI pipelines. The production HITL seam supports an actual operator callback controlling the same live browser session.
 
 ---
 

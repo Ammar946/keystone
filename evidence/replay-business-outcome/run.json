@@ -1,14 +1,14 @@
 {
-  "run_id": "run_dd8905ab",
+  "run_id": "run_5d13d2fa",
   "capability_id": "corebank.member.get_balance",
   "version": "1.0.0",
-  "session_id": "sess_91887117",
+  "session_id": "sess_59691106",
   "status": "BUSINESS_OUTCOME",
   "outcome_code": "MEMBER_NOT_FOUND",
   "message": "Legitimate business outcome: Record does not exist in ledger",
   "outputs": {},
   "steps_executed": 2,
-  "duration_ms": 2954.3731212615967,
+  "duration_ms": 2939.891815185547,
   "step_trace": [
     {
       "step_id": "step_enter_member_id",
@@ -16,7 +16,7 @@
       "target_description": "Member ID input field in search form",
       "matched_strategy": "accessibility",
       "strategy_confidence": 0.98,
-      "duration_ms": 47.173261642456055,
+      "duration_ms": 51.19585990905762,
       "status": "SUCCESS",
       "extracted_data": null,
       "error_message": null
@@ -27,7 +27,7 @@
       "target_description": "Search records submit button",
       "matched_strategy": "accessibility",
       "strategy_confidence": 0.96,
-      "duration_ms": 2543.2558059692383,
+      "duration_ms": 2536.069869995117,
       "status": "SUCCESS",
       "extracted_data": null,
       "error_message": null
