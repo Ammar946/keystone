@@ -139,6 +139,7 @@ class PlaywrightSurfaceAdapter:
                     break
 
         last_error = None
+        attempt_traces = []
         for candidate in locators_list:
             strategy = candidate.get("strategy")
             value = candidate.get("value")
@@ -167,10 +168,8 @@ class PlaywrightSurfaceAdapter:
                         locator = context_page.locator(value)
 
                 elif strategy in ["xpath_structural", "xpath_text"]:
-                    if scope_str and not value.startswith("//"):
-                        locator = context_page.locator(scope_str).locator(f"xpath={value}")
-                    else:
-                        locator = context_page.locator(f"xpath={value}")
+                    clean_xpath = value if value.startswith("//") else (f"//{value.lstrip('./')}" if value.startswith(".") else value)
+                    locator = context_page.locator(f"xpath={clean_xpath}")
 
                 elif strategy == "text_label_relation":
                     if hasattr(context_page, "get_by_label"):
@@ -181,6 +180,7 @@ class PlaywrightSurfaceAdapter:
                 elif strategy == "visual_coordinates":
                     # Coordinate fallback
                     if isinstance(value, dict) and "x" in value and "y" in value:
+                        attempt_traces.append({"strategy": strategy, "value": value, "result": "found", "confidence": 0.5})
                         return ResolvedElement(
                             handle=None,
                             matched_strategy=strategy,
@@ -188,32 +188,41 @@ class PlaywrightSurfaceAdapter:
                             confidence=0.5,
                             frame_context=frame_str,
                             bounding_box=value,
+                            attempt_traces=attempt_traces,
                         )
 
                 if locator:
-                    # Check visibility within timeout
-                    await locator.first.wait_for(state="visible", timeout=timeout_ms)
+                    # Check visibility with per-candidate timeout
+                    cand_timeout = min(timeout_ms, 1500) if len(locators_list) > 1 else timeout_ms
+                    await locator.first.wait_for(state="visible", timeout=cand_timeout)
+                    attempt_traces.append({"strategy": strategy, "value": value, "result": "found", "confidence": confidence})
                     return ResolvedElement(
                         handle=locator.first,
                         matched_strategy=strategy,
                         selector_value=value,
                         confidence=confidence,
                         frame_context=frame_str,
+                        attempt_traces=attempt_traces,
                     )
+                else:
+                    attempt_traces.append({"strategy": strategy, "value": value, "result": "not_found", "error": "Locator unresolved"})
 
             except Exception as e:
+                attempt_traces.append({"strategy": strategy, "value": value, "result": "not_found", "error": str(e)})
                 last_error = e
                 continue
 
         # If locators failed, check visual_bbox if available
         if target_spec.get("visual_bbox"):
             bbox = target_spec["visual_bbox"]
+            attempt_traces.append({"strategy": "visual_coordinates", "value": bbox, "result": "found", "confidence": 0.4})
             return ResolvedElement(
                 handle=None,
                 matched_strategy="visual_coordinates",
                 selector_value=bbox,
                 confidence=0.4,
                 bounding_box=bbox,
+                attempt_traces=attempt_traces,
             )
 
         raise RuntimeError(f"Failed to resolve target '{target_spec.get('description', 'unnamed')}' with locators {locators_list}. Last error: {last_error}")

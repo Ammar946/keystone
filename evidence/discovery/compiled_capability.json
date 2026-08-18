@@ -3,8 +3,8 @@
   "capability_id": "corebank.member.get_balance",
   "version": "1.0.0",
   "status": "APPROVED",
-  "name": "Lookup Member Account Balances",
-  "description": "Searches CoreBank console for a member by account ID and extracts savings and checking balances.",
+  "name": "Look up member 10042 and read savings balance",
+  "description": "Compiled capability artifact for: Look up member 10042 and read savings balance",
   "application": {
     "vendor": "Apex",
     "product": "CoreBank",
@@ -19,13 +19,15 @@
     "default_base_url": "http://localhost:8080",
     "allowed_domains": [
       "localhost:8080",
-      "127.0.0.1:8080"
+      "127.0.0.1:8080",
+      "localhost",
+      "127.0.0.1"
     ]
   },
   "inputs_schema": {
     "member_id": {
       "type": "string",
-      "description": "5-digit member account identifier (e.g. '10042')",
+      "description": "Target member account identifier",
       "required": true,
       "default": null,
       "sensitive": false
@@ -34,25 +36,25 @@
   "outputs_schema": {
     "member_name": {
       "type": "string",
-      "description": "Full legal name of member",
+      "description": "Ledger field for member name",
       "nullable": false,
       "sample": null
     },
     "account_status": {
       "type": "string",
-      "description": "Account standing (ACTIVE / FROZEN)",
+      "description": "Ledger field for account status",
       "nullable": false,
       "sample": null
     },
     "savings_balance": {
       "type": "decimal",
-      "description": "Ledger balance for regular savings account",
+      "description": "Ledger field for savings balance",
       "nullable": true,
       "sample": null
     },
     "checking_balance": {
       "type": "decimal",
-      "description": "Ledger balance for checking account",
+      "description": "Ledger field for checking balance",
       "nullable": true,
       "sample": null
     }
@@ -63,13 +65,13 @@
       "pattern": "/console/members",
       "target": null,
       "expected": null,
-      "message": "Must be on member console root route"
+      "message": "Must be on route /console/members"
     }
   ],
   "steps": [
     {
       "id": "step_enter_member_id",
-      "description": "Enter member ID into search query input",
+      "description": "Member ID input field in search form",
       "action": "type",
       "target": {
         "description": "Member ID input field in search form",
@@ -81,7 +83,7 @@
             "value": "textbox[name='Member ID / Account #']",
             "priority": 1,
             "confidence": 0.98,
-            "reasoning": "Semantic accessible textbox role with aria label",
+            "reasoning": "Discovered primary accessibility locator",
             "stability": "HIGH"
           },
           {
@@ -89,7 +91,7 @@
             "value": "input.legacy-input[name='memberId']",
             "priority": 2,
             "confidence": 0.88,
-            "reasoning": "Scoped CSS class in legacy searchForm",
+            "reasoning": "Scoped legacy CSS fallback",
             "stability": "HIGH"
           },
           {
@@ -97,7 +99,7 @@
             "value": ".//td[contains(text(),'Member ID')]/following-sibling::td/input",
             "priority": 3,
             "confidence": 0.75,
-            "reasoning": "Table cell label adjacency fallback",
+            "reasoning": "Structural label-adjacency XPath fallback",
             "stability": "HIGH"
           }
         ],
@@ -153,7 +155,7 @@
     },
     {
       "id": "step_click_search",
-      "description": "Submit search form to retrieve member records",
+      "description": "Search records submit button",
       "action": "click",
       "target": {
         "description": "Search records submit button",
@@ -165,7 +167,7 @@
             "value": "button[name='Search Records']",
             "priority": 1,
             "confidence": 0.96,
-            "reasoning": "Accessible button name query",
+            "reasoning": "Discovered primary button locator",
             "stability": "HIGH"
           },
           {
@@ -173,7 +175,7 @@
             "value": "button[type='submit'][name='btnSearch']",
             "priority": 2,
             "confidence": 0.9,
-            "reasoning": "Scoped submit button selector",
+            "reasoning": "Scoped button CSS selector fallback",
             "stability": "HIGH"
           },
           {
@@ -181,7 +183,7 @@
             "value": ".//button[text()='Search']",
             "priority": 3,
             "confidence": 0.78,
-            "reasoning": "Direct button text match",
+            "reasoning": "Direct text matching fallback",
             "stability": "HIGH"
           }
         ],
@@ -240,7 +242,7 @@
     },
     {
       "id": "step_extract_balances",
-      "description": "Extract member name, status, and account ledger balances",
+      "description": "Extract member profile information and ledger balances",
       "action": "extract",
       "target": null,
       "value_template": null,
@@ -312,10 +314,20 @@
       "navigate"
     ],
     "allowed_routes": [
-      "^/console/.*$"
+      "^/console.*$"
     ],
     "requires_confirmation_on_risk": true,
     "max_step_timeout_ms": 10000
   },
-  "metadata": {}
+  "provenance": {
+    "discovery_run_id": "disc_65bb9132",
+    "source_application": "Apex CoreBank Console v4.2",
+    "source_variant": "legacy_default",
+    "discovered_at": "2026-08-18T06:41:07Z",
+    "model": "gpt-4o",
+    "compiler_version": "1.2.0"
+  },
+  "metadata": {
+    "session_id": "sess_disc_b2887806"
+  }
 }

@@ -1,9 +1,11 @@
 """
-Pydantic v2 Models for Capability Artifacts, Locators, Safety Policies, and Tenant Overrides.
+Pydantic v2 Models for Capability Artifacts, Locators, Safety Policies,
+Tenant Overrides, Discovery Transcripts, and Policy Decisions.
 """
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Literal
 from enum import Enum
-from pydantic import BaseModel, Field
+import time
+from pydantic import BaseModel, Field, model_validator
 
 
 class CapabilityStatus(str, Enum):
@@ -48,6 +50,13 @@ class OutcomeType(str, Enum):
     RECOVERED = "RECOVERED"
     ESCALATED = "ESCALATED"
     HARD_FAILURE = "HARD_FAILURE"
+
+
+class RuntimeCondition(str, Enum):
+    TRANSIENT_INTERSTITIAL = "TRANSIENT_INTERSTITIAL"
+    LOADING_SPINNER = "LOADING_SPINNER"
+    ELEMENT_NOT_READY = "ELEMENT_NOT_READY"
+    UNKNOWN = "UNKNOWN"
 
 
 class VisualBBox(BaseModel):
@@ -174,6 +183,15 @@ class SafetyPolicy(BaseModel):
     max_step_timeout_ms: int = 10000
 
 
+class ArtifactProvenance(BaseModel):
+    discovery_run_id: str = "disc_001"
+    source_application: str = "Apex CoreBank Console v4.2"
+    source_variant: str = "legacy_default"
+    discovered_at: str = Field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    model: str = "gpt-4o"
+    compiler_version: str = "1.2.0"
+
+
 class CapabilityArtifact(BaseModel):
     schema_version: str = "1.0.0"
     capability_id: str = Field(..., description="Canonical reverse-domain identifier (e.g. corebank.member.get_balance)")
@@ -189,7 +207,29 @@ class CapabilityArtifact(BaseModel):
     steps: List[Step] = Field(default_factory=list)
     postconditions: List[Postcondition] = Field(default_factory=list)
     policy: SafetyPolicy = Field(default_factory=SafetyPolicy)
+    provenance: Optional[ArtifactProvenance] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_artifact_contract(self) -> "CapabilityArtifact":
+        # 1. Schema Major Version Check
+        major_ver = self.schema_version.split(".")[0]
+        if major_ver != "1":
+            raise ValueError(f"Incompatible schema version '{self.schema_version}'. Replay engine requires major version 1.")
+
+        # 2. Risk vs Idempotency Guardrail
+        for step in self.steps:
+            if step.risk_level == RiskLevel.IRREVERSIBLE:
+                if step.idempotent:
+                    raise ValueError(f"Contract violation on step '{step.id}': IRREVERSIBLE step cannot be declared idempotent.")
+                if step.retryable:
+                    raise ValueError(f"Contract violation on step '{step.id}': IRREVERSIBLE step cannot be auto-retryable.")
+
+        # 3. Policy & Route integrity
+        if not self.entry_point.allowed_domains:
+            raise ValueError("Contract violation: allowed_domains cannot be empty.")
+
+        return self
 
 
 class TenantOverride(BaseModel):
@@ -198,3 +238,47 @@ class TenantOverride(BaseModel):
     variant_id: str = "default"
     locator_overrides: Dict[str, List[LocatorCandidate]] = Field(default_factory=dict)
     custom_headers: Dict[str, str] = Field(default_factory=dict)
+
+
+# --- Typed Discovery Transcript Models ---
+
+class ObservationRecord(BaseModel):
+    url: str
+    title: str
+    interactive_elements_count: int
+    text_snippet: Optional[str] = None
+    timestamp: float = Field(default_factory=time.time)
+
+
+class DiscoveryActionRecord(BaseModel):
+    step_index: int
+    thought: str
+    action: ActionType
+    target_description: Optional[str] = None
+    target_selector: Optional[str] = None
+    selector_strategy: str = "accessibility"
+    value: Optional[str] = None
+    extract_fields: Optional[Dict[str, str]] = None
+    is_finished: bool = False
+    timestamp: float = Field(default_factory=time.time)
+
+
+class DiscoveryTranscript(BaseModel):
+    capability_goal: str
+    entry_url: str
+    application_variant: str = "default"
+    model: str = "gpt-4o"
+    discovery_run_id: str
+    session_id: str
+    observations: List[ObservationRecord] = Field(default_factory=list)
+    actions: List[DiscoveryActionRecord] = Field(default_factory=list)
+    extracted_outputs: Dict[str, Any] = Field(default_factory=dict)
+    business_outcomes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PolicyDecision(BaseModel):
+    allowed: bool = True
+    decision: Literal["ALLOW", "REQUIRE_HITL", "DENY"] = "ALLOW"
+    reason: str = "Permitted by safety policy."
+    matched_rule: Optional[str] = None
+    risk_level: Optional[str] = None

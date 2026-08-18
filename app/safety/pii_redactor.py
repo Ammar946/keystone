@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Union
 # Regex patterns for sensitive financial and authentication data
 SSN_REGEX = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 CARD_PAN_REGEX = re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b")
-BEARER_TOKEN_REGEX = re.compile(r"\b(Bearer\s+)[a-zA-Z0-9_\-\.]{15,}\b", re.IGNORECASE)
+BEARER_TOKEN_REGEX = re.compile(r"\b(Bearer\s+)[a-zA-Z0-9_\-\.]{8,}\b", re.IGNORECASE)
 GENERIC_SECRET_REGEX = re.compile(r"(api[_-]?key|password|secret|token|auth)\s*[:=]\s*['\"]?([a-zA-Z0-9_\-\.]{8,})['\"]?", re.IGNORECASE)
 ACCOUNT_NUMBER_REGEX = re.compile(r"\b009\d{5}-\d{2}\b")
 

@@ -122,9 +122,9 @@ class DeterministicReplayEngine:
             )
 
         # 4. Policy Gate with Dynamic Domain & Route allowlist
-        allowed_domains = artifact.entry_point.allowed_domains
+        allowed_domains = list(artifact.entry_point.allowed_domains)
         if tenant_override and tenant_override.base_url:
-            allowed_domains = allowed_domains + [tenant_override.base_url.split("://")[-1]]
+            allowed_domains.append(tenant_override.base_url)
 
         policy_gate = PolicyGate(
             policy=artifact.policy,
@@ -162,14 +162,14 @@ class DeterministicReplayEngine:
                 )
 
                 # B. High-Risk / Irreversible Action Encountered
-                if policy_decision["decision"] == "REQUIRE_HITL":
+                if policy_decision.decision == "REQUIRE_HITL":
                     if enable_hitl and self.escalation_manager:
                         # 1. Raise Intervention Package on the same live session
                         intervention_pkg = await self.escalation_manager.raise_intervention_request(
                             capability_id=artifact.capability_id,
                             step=step,
                             step_index=step_idx + 1,
-                            reason=policy_decision["reason"],
+                            reason=policy_decision.reason,
                         )
                         human_interventions.append(intervention_pkg)
 
@@ -217,7 +217,7 @@ class DeterministicReplayEngine:
                                 session_id=session_id,
                                 status=OutcomeType.ESCALATED,
                                 outcome_code="HIGH_RISK_GATE",
-                                message=policy_decision["reason"],
+                                message=policy_decision.reason,
                                 steps_executed=step_idx,
                                 duration_ms=(time.time() - start_time) * 1000,
                                 step_trace=step_traces,
@@ -253,7 +253,7 @@ class DeterministicReplayEngine:
                             session_id=session_id,
                             status=OutcomeType.ESCALATED,
                             outcome_code="HIGH_RISK_GATE",
-                            message=policy_decision["reason"],
+                            message=policy_decision.reason,
                             steps_executed=step_idx,
                             duration_ms=(time.time() - start_time) * 1000,
                             step_trace=step_traces,

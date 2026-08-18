@@ -1,5 +1,5 @@
 """
-Unit Tests for Capability Artifact Schemas and Validation.
+Unit Tests for Capability Artifact Schemas, Contract Validation, and Rejection of Corrupt Artifacts.
 """
 import pytest
 import json
@@ -47,3 +47,39 @@ def test_locator_candidate_confidence_bounds():
 
     with pytest.raises(ValidationError):
         LocatorCandidate(strategy="accessibility", value="button[name='Save']", confidence=1.5)
+
+
+def test_artifact_contract_incompatible_major_version():
+    """Verify rejection of unsupported major schema versions."""
+    with open("artifacts/get_member_balance.json", "r") as f:
+        data = json.load(f)
+    data["schema_version"] = "2.0.0" # Unsupported major version
+    with pytest.raises(ValidationError) as exc_info:
+        CapabilityArtifact.model_validate(data)
+    assert "Incompatible schema version" in str(exc_info.value)
+
+
+def test_artifact_contract_irreversible_idempotent_rejection():
+    """Verify rejection when an IRREVERSIBLE step is marked idempotent or retryable."""
+    with open("artifacts/open_sub_account.json", "r") as f:
+        data = json.load(f)
+    
+    # Corrupt step 5: make IRREVERSIBLE action idempotent
+    for step in data["steps"]:
+        if step["id"] == "step_authorize_creation":
+            step["risk_level"] = "IRREVERSIBLE"
+            step["idempotent"] = True
+    
+    with pytest.raises(ValidationError) as exc_info:
+        CapabilityArtifact.model_validate(data)
+    assert "IRREVERSIBLE step cannot be declared idempotent" in str(exc_info.value)
+
+
+def test_artifact_contract_empty_allowed_domains():
+    """Verify rejection when allowed_domains is empty."""
+    with open("artifacts/get_member_balance.json", "r") as f:
+        data = json.load(f)
+    data["entry_point"]["allowed_domains"] = []
+    with pytest.raises(ValidationError) as exc_info:
+        CapabilityArtifact.model_validate(data)
+    assert "allowed_domains cannot be empty" in str(exc_info.value)

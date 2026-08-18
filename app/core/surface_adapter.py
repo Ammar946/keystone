@@ -53,24 +53,27 @@ class ResolvedElement:
     frame_context: Optional[str] = None
     bounding_box: Optional[Dict[str, float]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    attempt_traces: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @runtime_checkable
 class SurfaceAdapter(Protocol):
     """
-    Surface-neutral perception and interaction protocol.
-    Concrete implementations:
-      - PlaywrightSurfaceAdapter (Web / Frames / Legacy DOM)
-      - DesktopSurfaceAdapter (OS Accessibility / Windows UI Automation / macOS)
-      - CUASurfaceAdapter (Vision / Coordinate Model)
+    Surface-neutral perception and action driver protocol.
+    Satisfied by PlaywrightSurfaceAdapter (Web), DesktopSurfaceAdapter (Desktop OS),
+    and CUASurfaceAdapter (Visual / Canvas).
     """
 
     async def initialize(self, session_id: str, entry_point: str, headless: bool = True) -> None:
-        """Initialize the live surface connection with the given session ID."""
+        """Initialize driver lifecycle, navigate to target, and establish session."""
         ...
 
-    async def observe(self, capture_screenshot: bool = True) -> SurfaceState:
-        """Extract structured multi-modal perception of the current surface state."""
+    async def get_session_id(self) -> str:
+        """Return active execution session ID."""
+        ...
+
+    async def observe(self, capture_screenshot: bool = False) -> SurfaceState:
+        """Capture active surface snapshot: URL, DOM/A11y tree, text, and optional screenshot."""
         ...
 
     async def resolve_target(
@@ -80,47 +83,40 @@ class SurfaceAdapter(Protocol):
         scope: Optional[str] = None,
         frame_context: Optional[str] = None,
     ) -> ResolvedElement:
-        """Resolve an element on the surface using multi-strategy cascading locators."""
+        """
+        Evaluate cascading multi-strategy locators:
+        Accessibility -> Scoped CSS -> Structural XPath -> Coordinate Fallback.
+        """
         ...
 
-    async def click(self, element: ResolvedElement) -> None:
-        """Perform a single click on the resolved element."""
+    async def click(self, target: ResolvedElement) -> None:
+        """Execute atomic click on resolved target."""
         ...
 
-    async def type_text(
-        self,
-        element: ResolvedElement,
-        text: str,
-        clear_first: bool = True,
-        sensitive: bool = False,
-    ) -> None:
-        """Type text into the resolved element."""
+    async def type_text(self, target: ResolvedElement, text: str, clear_first: bool = True) -> None:
+        """Type text into resolved input element."""
         ...
 
-    async def select_option(self, element: ResolvedElement, value: str) -> None:
-        """Select an option in a dropdown or select control."""
+    async def select_option(self, target: ResolvedElement, value: str) -> None:
+        """Select option in dropdown / combobox."""
         ...
 
-    async def read_text(self, element: ResolvedElement) -> str:
-        """Read textual content from the resolved element."""
+    async def read_text(self, target: ResolvedElement) -> str:
+        """Extract text content from element."""
         ...
 
-    async def read_table(self, element: ResolvedElement) -> List[Dict[str, str]]:
-        """Extract structured tabular data from a legacy table or grid element."""
+    async def read_table(self, target: ResolvedElement) -> List[Dict[str, str]]:
+        """Extract structured tabular rows from table container."""
         ...
 
     async def capture_screenshot(self, mask_sensitive: bool = True) -> bytes:
-        """Capture screenshot with optional DOM-level redaction of sensitive fields."""
+        """Capture PNG screenshot with optional DOM-level PII masking."""
         ...
 
     async def wait_for_state(self, condition: str, value: Any, timeout_ms: int = 5000) -> bool:
-        """Wait for a surface condition (route_matches, element_present, text_present)."""
-        ...
-
-    async def get_session_id(self) -> str:
-        """Return the unique session identifier."""
+        """Wait for dynamic state transition (element_visible, url_matches, etc.)."""
         ...
 
     async def close(self) -> None:
-        """Cleanly close surface connection."""
+        """Cleanly terminate surface driver and close browser/window handles."""
         ...

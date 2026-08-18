@@ -6,7 +6,7 @@ BEFORE any operation reaches the Surface Adapter.
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 import re
-from app.core.models import SafetyPolicy, RiskLevel, ActionType, Step
+from app.core.models import SafetyPolicy, RiskLevel, ActionType, Step, PolicyDecision
 
 
 class PolicyViolationError(Exception):
@@ -40,8 +40,9 @@ class PolicyGate:
         # 1. Domain allowlist check
         domain_match = False
         for allowed in self.allowed_domains:
-            allowed_clean = allowed.split(":")[0]
-            if netloc == allowed or host == allowed_clean:
+            allowed_clean = allowed.split("://")[-1].split("/")[0].split(":")[0]
+            allowed_full = allowed.split("://")[-1].split("/")[0]
+            if netloc == allowed_full or host == allowed_clean:
                 domain_match = True
                 break
 
@@ -75,10 +76,10 @@ class PolicyGate:
         step: Step,
         current_url: str,
         human_approved: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> PolicyDecision:
         """
         Pre-action gate: Evaluates (action, target, risk_level, url).
-        Returns decision status: 'ALLOW', 'BLOCK', or 'REQUIRE_HITL'.
+        Returns typed PolicyDecision: 'ALLOW', 'REQUIRE_HITL', or raises PolicyViolationError.
         """
         # 1. Check URL
         self.check_url(current_url)
@@ -109,10 +110,17 @@ class PolicyGate:
 
         if is_high_risk:
             if not human_approved and self.policy.requires_confirmation_on_risk:
-                return {
-                    "decision": "REQUIRE_HITL",
-                    "reason": f"Step '{step.id}' contains high-risk/irreversible action ('{step_desc or target_desc}'). Requires human intervention.",
-                    "risk_level": RiskLevel.HIGH_RISK.value,
-                }
+                return PolicyDecision(
+                    allowed=False,
+                    decision="REQUIRE_HITL",
+                    reason=f"Step '{step.id}' contains high-risk/irreversible action ('{step_desc or target_desc}'). Requires human intervention.",
+                    matched_rule="CONFIRMATION_ON_RISK",
+                    risk_level=RiskLevel.HIGH_RISK.value,
+                )
 
-        return {"decision": "ALLOW", "risk_level": step.risk_level.value}
+        return PolicyDecision(
+            allowed=True,
+            decision="ALLOW",
+            reason="Action permitted by policy gate.",
+            risk_level=step.risk_level.value,
+        )

@@ -43,7 +43,7 @@ keystone/
 │   ├── replay-success/                # Deterministic replay logs & extracted outputs
 │   ├── replay-business-outcome/       # Expected business outcome (Record Not Found) logs
 │   └── replay-hitl/                   # Same-session live intervention & human takeover logs
-├── tests/                             # Full automated test suite (15 tests)
+├── tests/                             # Full automated test suite (24 tests)
 ├── cli.py                             # Unified CLI entry point
 ├── REPORT.md                          # 7-Section comprehensive architecture report
 └── README.md

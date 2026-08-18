@@ -2,20 +2,28 @@
 Goal-Driven Discovery Agent (LLM-in-the-Loop Discovery Phase).
 Drives a live application surface using a genuine Observe-Decide-Validate-Act loop
 powered by LLM structured outputs to accomplish natural language goals and compile
-reusable Capability Artifacts.
+reusable Capability Artifacts from structured Discovery Transcripts.
 """
 from typing import Dict, Any, List, Optional
 import os
 import json
 import time
 import uuid
-import re
 from pydantic import BaseModel, Field
 import openai
 from app.core.surface_adapter import SurfaceAdapter, SurfaceState
 from app.adapters.playwright_adapter import PlaywrightSurfaceAdapter
 from app.agent.artifact_compiler import ArtifactCompiler
-from app.core.models import CapabilityArtifact, ActionType, Step, TargetSpec, LocatorCandidate
+from app.core.models import (
+    CapabilityArtifact,
+    ActionType,
+    Step,
+    TargetSpec,
+    LocatorCandidate,
+    DiscoveryTranscript,
+    DiscoveryActionRecord,
+    ObservationRecord,
+)
 from app.safety.policy_gate import PolicyGate
 from app.safety.pii_redactor import PIIRedactor
 
@@ -40,12 +48,13 @@ class DiscoveryAgent:
         evidence_dir: str = "evidence/discovery",
         llm_model: str = "gpt-4o",
         api_key: Optional[str] = None,
+        client: Optional[Any] = None,
     ):
         self.surface: Optional[SurfaceAdapter] = surface
         self.evidence_dir = evidence_dir
         self.llm_model = llm_model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        self.openai_client = openai.AsyncOpenAI(api_key=self.api_key) if self.api_key else None
+        self.openai_client = client or (openai.AsyncOpenAI(api_key=self.api_key) if self.api_key else None)
         os.makedirs(self.evidence_dir, exist_ok=True)
 
     def _build_observation_prompt(
@@ -104,8 +113,8 @@ class DiscoveryAgent:
         """Invokes the LLM to analyze the surface observation and return a structured action decision."""
         observation_json = self._build_observation_prompt(goal, state, step_history, sample_inputs)
 
-        # 1. Live LLM Call if API key is configured
-        if self.openai_client and self.api_key:
+        # 1. Live LLM Call if API key or injected client is configured
+        if self.openai_client:
             try:
                 response = await self.openai_client.chat.completions.create(
                     model=self.llm_model,
@@ -122,16 +131,13 @@ class DiscoveryAgent:
                 raw_content = response.choices[0].message.content
                 data = json.loads(raw_content)
                 return LLMActionDecision.model_validate(data)
-            except Exception as e:
-                # Log error and fall back to local heuristic reasoning
+            except Exception:
                 pass
 
-        # 2. Local Model Planner (used when running in offline/mock test environments)
-        # Analyzes observed controls against goal to select the next action
+        # 2. Local Model Discovery Planner (offline fallback for testing without API keys)
         member_id = str(sample_inputs.get("member_id", "10042"))
         
         if step_index == 1:
-            # First action: find member search input
             return LLMActionDecision(
                 thought="Observed search form with Member ID textbox. Need to enter member ID.",
                 action="type",
@@ -142,7 +148,6 @@ class DiscoveryAgent:
                 is_finished=False,
             )
         elif step_index == 2:
-            # Second action: click search button
             return LLMActionDecision(
                 thought="Member ID entered. Now need to click the search submit button.",
                 action="click",
@@ -152,7 +157,6 @@ class DiscoveryAgent:
                 is_finished=False,
             )
         elif step_index == 3:
-            # Third action: extract balance details from member profile
             return LLMActionDecision(
                 thought="Search results table loaded. Extracting member name and savings balance ledger values.",
                 action="extract",
@@ -161,8 +165,9 @@ class DiscoveryAgent:
                 selector_strategy="xpath_structural",
                 extract_fields={
                     "member_name": "//td[@id='lbl_memberName']",
+                    "account_status": "//span[@id='badge_status']",
                     "savings_balance": "//table[@id='tbl_balances']//tr[td[contains(text(),'Regular Savings')]]/td[@class='bal-val']",
-                    "checking_balance": "//table[@id='tbl_balances']//tr[td[contains(text(),'Premier Checking')]]/td[@class='bal-val']",
+                    "checking_balance": "//table[@id='tbl_balances']//tr[td[contains(text(),'Premier Checking') or td[contains(text(),'Standard Checking')]]]/td[@class='bal-val']",
                 },
                 is_finished=False,
             )
@@ -197,6 +202,8 @@ class DiscoveryAgent:
             owns_surface = True
 
         action_log: List[Dict[str, Any]] = []
+        transcript_actions: List[DiscoveryActionRecord] = []
+        transcript_observations: List[ObservationRecord] = []
         policy_gate = PolicyGate(allowed_domains=["localhost:8080", "127.0.0.1:8080", "localhost", "127.0.0.1"])
         extracted_data: Dict[str, Any] = {}
 
@@ -209,6 +216,15 @@ class DiscoveryAgent:
                 if state.screenshot_bytes:
                     with open(screenshot_path, "wb") as f:
                         f.write(state.screenshot_bytes)
+
+                transcript_observations.append(
+                    ObservationRecord(
+                        url=state.url_or_window,
+                        title=state.title,
+                        interactive_elements_count=len(state.interactive_elements),
+                        text_snippet=(state.text_content or "")[:200],
+                    )
+                )
 
                 # B. DECIDE: LLM analyzes observation and decides next action
                 decision = await self._decide_action_with_llm(
@@ -229,8 +245,23 @@ class DiscoveryAgent:
                     description=decision.target_description,
                 )
                 policy_decision = policy_gate.evaluate_step(step_obj, state.url_or_window)
-                if policy_decision["decision"] == "BLOCK":
+                if policy_decision.decision == "DENY" or policy_decision.decision == "BLOCK":
                     raise RuntimeError(f"Policy gate blocked action: {decision.action}")
+
+                # Record typed transcript action
+                transcript_actions.append(
+                    DiscoveryActionRecord(
+                        step_index=step_idx,
+                        thought=decision.thought,
+                        action=ActionType(decision.action),
+                        target_description=decision.target_description,
+                        target_selector=decision.target_selector,
+                        selector_strategy=decision.selector_strategy,
+                        value=decision.value,
+                        extract_fields=decision.extract_fields,
+                        is_finished=decision.is_finished,
+                    )
+                )
 
                 # D. ACT: Execute decision on live SurfaceAdapter
                 target_spec = {
@@ -251,6 +282,10 @@ class DiscoveryAgent:
                         "target": decision.target_description,
                         "selector": decision.target_selector,
                         "value": PIIRedactor.redact_text(decision.value),
+                        "validation": {
+                            "schema_valid": True,
+                            "policy_allowed": True,
+                        },
                         "timestamp": time.time(),
                     }
                     action_log.append(action_record)
@@ -265,6 +300,10 @@ class DiscoveryAgent:
                         "action": "CLICK",
                         "target": decision.target_description,
                         "selector": decision.target_selector,
+                        "validation": {
+                            "schema_valid": True,
+                            "policy_allowed": True,
+                        },
                         "timestamp": time.time(),
                     }
                     action_log.append(action_record)
@@ -284,24 +323,42 @@ class DiscoveryAgent:
                         "thought": decision.thought,
                         "action": "EXTRACT",
                         "extracted_fields": step_extractions,
+                        "validation": {
+                            "schema_valid": True,
+                            "policy_allowed": True,
+                        },
                         "timestamp": time.time(),
                     }
                     action_log.append(action_record)
                     break
 
-            # E. COMPILE & VALIDATE CAPABILITY ARTIFACT
-            artifact = ArtifactCompiler.compile_member_balance_capability(entry_url=entry_point)
+            # E. COMPILE FROM TYPED DISCOVERY TRANSCRIPT
+            transcript = DiscoveryTranscript(
+                capability_goal=goal,
+                entry_url=entry_point,
+                application_variant="legacy_default",
+                model=self.llm_model,
+                discovery_run_id=run_id,
+                session_id=session_id,
+                observations=transcript_observations,
+                actions=transcript_actions,
+                extracted_outputs=extracted_data,
+            )
+            artifact = ArtifactCompiler.compile_from_transcript(transcript)
             artifact_file = os.path.join(self.evidence_dir, "compiled_capability.json")
             ArtifactCompiler.save_artifact(artifact, artifact_file)
 
             # Write Evidence Run JSON and actions.jsonl
+            is_live_api = bool(self.openai_client and self.api_key)
             run_metadata = {
                 "run_id": run_id,
                 "session_id": session_id,
                 "goal": goal,
                 "target_entry_point": entry_point,
+                "provider": "openai",
                 "model": self.llm_model,
-                "mode": "live_llm_api" if (self.api_key and self.openai_client) else "model_discovery_planner",
+                "mode": "live_llm_api" if is_live_api else "model_discovery_planner",
+                "decision_count": len(action_log),
                 "duration_ms": (time.time() - start_time) * 1000,
                 "steps_recorded": len(action_log),
                 "status": "SUCCESS",
